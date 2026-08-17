@@ -1,0 +1,36 @@
+{
+  "name": "securedev-backend",
+  "version": "1.0.0",
+  "description": "SecureDev - DevSecOps orchestration API for MERN projects",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build": "npm install && pip install semgrep --break-system-packages || pip3 install semgrep"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mongoose": "^8.5.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "dotenv": "^16.4.5",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.3.1",
+    "express-validator": "^7.1.0",
+    "multer": "^1.4.5-lts.1",
+    "adm-zip": "^0.5.14",
+    "axios": "^1.7.2",
+    "pdfkit": "^0.15.0",
+    "morgan": "^1.10.0",
+    "cookie-parser": "^1.4.6",
+    "simple-git": "^3.25.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

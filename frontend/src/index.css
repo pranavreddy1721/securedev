@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  @apply bg-surface dark:bg-surface-dark text-ink dark:text-ink-dark antialiased;
+}
+
+code, pre, .font-data {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Smooth theme transitions so dark-mode toggling doesn't feel jarring */
+* {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+}
