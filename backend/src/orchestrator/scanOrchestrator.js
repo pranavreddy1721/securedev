@@ -3,20 +3,17 @@ const { runSecretScan } = require('../scanners/secret.scanner');
 const { runSemgrepScan } = require('../scanners/semgrep.scanner');
 const { runHeuristicScan } = require('../scanners/heuristic.scanner');
 const { computeScore } = require('../scoring/scoringEngine');
+const { deduplicateFindings } = require('../utils/findingNormalizer');
 const Scan = require('../models/Scan');
 const Project = require('../models/Project');
 const { createTempDir, cleanupTempDir } = require('../utils/tempDir');
 
 /**
  * Orchestrates a full scan against a prepared project directory.
- * Per the confirmed decision: npm audit and Semgrep run via child_process
- * (execFile), the secret scanner and heuristic scanner run as plain async
- * JS — all three scan types run concurrently via Promise.allSettled, so one
- * engine failing (e.g. Semgrep timeout) doesn't kill the whole scan.
- *
- * projectDir is always inside os.tmpdir() and is deleted in the finally
- * block regardless of success/failure — no persistent storage of source
- * code, per the confirmed "local temp dir, no S3 in v1" decision.
+ * Core engines run concurrently, but a failed core engine no longer produces
+ * a seemingly complete security score. Findings are normalized and merged
+ * before scoring so duplicate reports from different engines do not create
+ * an artificial penalty.
  */
 async function runOrchestratedScan({ scanId, projectDir }) {
   const scan = await Scan.findById(scanId);
@@ -24,6 +21,7 @@ async function runOrchestratedScan({ scanId, projectDir }) {
 
   scan.status = 'running';
   scan.startedAt = new Date();
+  scan.assessmentStatus = 'incomplete';
   await scan.save();
 
   const startTime = Date.now();
@@ -36,50 +34,57 @@ async function runOrchestratedScan({ scanId, projectDir }) {
       runHeuristicScan(projectDir),
     ]);
 
-    const findings = [];
+    const rawFindings = [];
     const engineStatus = { npmAudit: 'failed', secretScanner: 'failed', semgrep: 'failed' };
 
     if (npmResult.status === 'fulfilled') {
       engineStatus.npmAudit = npmResult.value.skipped ? 'skipped' : 'success';
-      findings.push(...npmResult.value.findings);
+      rawFindings.push(...npmResult.value.findings);
     } else {
       console.error(`[orchestrator] npm audit failed for scan ${scanId}:`, npmResult.reason?.message);
     }
 
     if (secretResult.status === 'fulfilled') {
       engineStatus.secretScanner = 'success';
-      findings.push(...secretResult.value);
+      rawFindings.push(...secretResult.value);
     } else {
       console.error(`[orchestrator] secret scan failed for scan ${scanId}:`, secretResult.reason?.message);
     }
 
     if (semgrepResult.status === 'fulfilled') {
       engineStatus.semgrep = 'success';
-      findings.push(...semgrepResult.value.findings);
+      rawFindings.push(...semgrepResult.value.findings);
     } else {
       console.error(`[orchestrator] semgrep failed for scan ${scanId}:`, semgrepResult.reason?.message);
     }
 
-    // Heuristic scan is treated as best-effort/supplementary — its failure
-    // doesn't get its own engineStatus slot since it's not one of the 3
-    // named engines in the spec, but findings still merge in on success.
+    // Heuristic scanning remains supplementary. Its failure is logged but
+    // does not make a scan incomplete because it is not a core external engine.
     if (heuristicResult.status === 'fulfilled') {
-      findings.push(...heuristicResult.value);
+      rawFindings.push(...heuristicResult.value);
     } else {
       console.error(`[orchestrator] heuristic scan failed for scan ${scanId}:`, heuristicResult.reason?.message);
     }
 
-    // If every real engine failed, this scan didn't actually accomplish anything —
-    // surface it as failed rather than reporting a misleadingly clean 100 score.
-    const allCoreEnginesFailed =
-      engineStatus.npmAudit === 'failed' &&
-      engineStatus.secretScanner === 'failed' &&
-      engineStatus.semgrep === 'failed';
+    scan.engineStatus = engineStatus;
 
-    if (allCoreEnginesFailed) {
-      scan.status = 'failed';
-      scan.error = 'All scan engines failed to run. See server logs for details.';
-      scan.engineStatus = engineStatus;
+    // npm audit is legitimately skipped when no root package.json exists.
+    // Secret scanning and Semgrep are applicable to all supported source ZIPs.
+    const coreEngineFailure =
+      engineStatus.secretScanner === 'failed' ||
+      engineStatus.semgrep === 'failed' ||
+      engineStatus.npmAudit === 'failed';
+
+    const findings = deduplicateFindings(rawFindings);
+    scan.findings = findings;
+
+    if (coreEngineFailure) {
+      scan.status = 'completed';
+      scan.assessmentStatus = 'incomplete';
+      scan.error = 'One or more core security engines failed. Findings are available, but no comprehensive security score was generated.';
+      scan.subScores = null;
+      scan.finalScore = null;
+      scan.riskBand = null;
       scan.completedAt = new Date();
       scan.durationMs = Date.now() - startTime;
       await scan.save();
@@ -88,11 +93,11 @@ async function runOrchestratedScan({ scanId, projectDir }) {
 
     const { subScores, finalScore, riskBand } = computeScore(findings);
 
-    scan.findings = findings;
     scan.subScores = subScores;
     scan.finalScore = finalScore;
     scan.riskBand = riskBand;
-    scan.engineStatus = engineStatus;
+    scan.assessmentStatus = 'complete';
+    scan.error = null;
     scan.status = 'completed';
     scan.completedAt = new Date();
     scan.durationMs = Date.now() - startTime;
@@ -107,6 +112,7 @@ async function runOrchestratedScan({ scanId, projectDir }) {
     return scan;
   } catch (err) {
     scan.status = 'failed';
+    scan.assessmentStatus = 'incomplete';
     scan.error = err.message;
     scan.completedAt = new Date();
     scan.durationMs = Date.now() - startTime;
