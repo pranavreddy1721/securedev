@@ -6,15 +6,9 @@ const findingSchema = new mongoose.Schema(
       type: String,
       required: true,
       enum: [
-        'vulnerableDependencies',
-        'hardcodedSecrets',
-        'injectionFlaws',
-        'xss',
-        'brokenAuthentication',
-        'securityMisconfiguration',
-        'insecureFileUploads',
-        'brokenAccessControl',
-        'sensitiveDataExposure',
+        'vulnerableDependencies', 'hardcodedSecrets', 'injectionFlaws', 'xss',
+        'brokenAuthentication', 'securityMisconfiguration', 'insecureFileUploads',
+        'brokenAccessControl', 'sensitiveDataExposure',
       ],
     },
     severity: { type: String, required: true, enum: ['critical', 'high', 'medium', 'low'] },
@@ -49,34 +43,22 @@ const scanSchema = new mongoose.Schema(
   {
     project: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true, index: true },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-
-    status: {
-      type: String,
-      enum: ['queued', 'running', 'completed', 'failed'],
-      default: 'queued',
-    },
+    status: { type: String, enum: ['queued', 'running', 'completed', 'failed'], default: 'queued' },
     error: { type: String, default: null },
-
-    // A score is only a comprehensive assessment when all applicable core
-    // engines completed successfully. A failed core engine makes the scan
-    // incomplete so a missing result cannot masquerade as a clean result.
     assessmentStatus: {
       type: String,
       enum: ['complete', 'incomplete'],
       default: 'incomplete',
     },
-
     engineStatus: {
       npmAudit: { type: String, enum: ['pending', 'success', 'failed', 'skipped'], default: 'pending' },
       secretScanner: { type: String, enum: ['pending', 'success', 'failed', 'skipped'], default: 'pending' },
       semgrep: { type: String, enum: ['pending', 'success', 'failed', 'skipped'], default: 'pending' },
     },
-
     findings: { type: [findingSchema], default: [] },
     subScores: { type: subScoreSchema, default: null },
     finalScore: { type: Number, default: null },
     riskBand: { type: String, default: null },
-
     startedAt: { type: Date, default: null },
     completedAt: { type: Date, default: null },
     durationMs: { type: Number, default: null },
