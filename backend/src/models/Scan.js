@@ -23,8 +23,13 @@ const findingSchema = new mongoose.Schema(
     file: { type: String, default: null },
     line: { type: Number, default: null },
     engine: { type: String, required: true, enum: ['npm-audit', 'secret-scanner', 'semgrep', 'heuristic'] },
+    engines: {
+      type: [String],
+      enum: ['npm-audit', 'secret-scanner', 'semgrep', 'heuristic'],
+      default: undefined,
+    },
     owaspRef: { type: String, default: null },
-    heuristic: { type: Boolean, default: false }, // true for the 3 pattern-based-only categories
+    heuristic: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -52,8 +57,15 @@ const scanSchema = new mongoose.Schema(
     },
     error: { type: String, default: null },
 
-    // Per-engine execution status — lets a partial failure (e.g. Semgrep timing out)
-    // still produce a usable report instead of failing the whole scan.
+    // A score is only a comprehensive assessment when all applicable core
+    // engines completed successfully. A failed core engine makes the scan
+    // incomplete so a missing result cannot masquerade as a clean result.
+    assessmentStatus: {
+      type: String,
+      enum: ['complete', 'incomplete'],
+      default: 'incomplete',
+    },
+
     engineStatus: {
       npmAudit: { type: String, enum: ['pending', 'success', 'failed', 'skipped'], default: 'pending' },
       secretScanner: { type: String, enum: ['pending', 'success', 'failed', 'skipped'], default: 'pending' },
