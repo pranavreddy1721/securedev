@@ -1,10 +1,7 @@
 /**
- * Normalizes and de-duplicates findings produced by multiple security engines.
- *
- * The same issue can legitimately be reported by more than one engine
- * (for example, a hardcoded secret may be found by both Semgrep and the
- * secret scanner). Counting both reports would artificially increase the
- * scoring penalty, so equivalent findings are merged before scoring.
+ * Normalize and de-duplicate findings produced by multiple security engines.
+ * Equivalent reports are merged before scoring so the same issue is not
+ * penalized multiple times simply because more than one engine detected it.
  */
 
 const SEVERITY_RANK = Object.freeze({
@@ -15,20 +12,27 @@ const SEVERITY_RANK = Object.freeze({
 });
 
 function normalizePath(file = '') {
-  return String(file).replaceAll('\\', '/').replace(/^\.\//, '').toLowerCase();
+  return String(file)
+    .replaceAll('\\', '/')
+    .replace(/^\.\//, '')
+    .toLowerCase();
 }
 
 function normalizeTitle(title = '') {
   return String(title).trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/**
+ * Location is intentionally excluded when it is unavailable. This allows
+ * scanners that report the same dependency/secret without a line number to
+ * merge with a scanner that does have a precise location.
+ */
 function findingKey(finding) {
-  return [
-    finding.category || '',
-    normalizePath(finding.file || ''),
-    finding.line ?? '',
-    normalizeTitle(finding.title || ''),
-  ].join('|');
+  const category = finding.category || '';
+  const file = normalizePath(finding.file || '');
+  const title = normalizeTitle(finding.title || '');
+  const line = Number.isFinite(Number(finding.line)) ? Number(finding.line) : '';
+  return [category, file, line, title].join('|');
 }
 
 function deduplicateFindings(findings = []) {
@@ -41,7 +45,7 @@ function deduplicateFindings(findings = []) {
     if (!existing) {
       merged.set(key, {
         ...finding,
-        engines: [finding.engine].filter(Boolean),
+        engines: finding.engine ? [finding.engine] : [],
       });
       continue;
     }
@@ -50,12 +54,10 @@ function deduplicateFindings(findings = []) {
       existing.engines.push(finding.engine);
     }
 
-    // Preserve the strongest severity when engines disagree.
     if ((SEVERITY_RANK[finding.severity] || 0) > (SEVERITY_RANK[existing.severity] || 0)) {
       existing.severity = finding.severity;
     }
 
-    // Prefer a concrete location/description when the first engine omitted it.
     if (!existing.file && finding.file) existing.file = finding.file;
     if (!existing.line && finding.line) existing.line = finding.line;
     if (!existing.description && finding.description) existing.description = finding.description;
@@ -63,12 +65,7 @@ function deduplicateFindings(findings = []) {
     existing.heuristic = Boolean(existing.heuristic && finding.heuristic);
   }
 
-  return Array.from(merged.values()).map(({ engines, ...finding }) => ({
-    ...finding,
-    // Keep the original schema compatible while retaining provenance.
-    engine: finding.engine,
-    engines,
-  }));
+  return Array.from(merged.values());
 }
 
 module.exports = { deduplicateFindings, findingKey };
