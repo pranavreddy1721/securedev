@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Download, AlertCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import client from '../api/client';
 import { LoadingState, ErrorState } from '../components/AsyncStates';
@@ -93,6 +93,8 @@ export default function ScanResults() {
     arr.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
   );
 
+  const isIncomplete = scan.assessmentStatus === 'incomplete';
+
   return (
     <div className="mx-auto max-w-4xl px-6 py-10">
       <div className="flex items-start justify-between">
@@ -112,22 +114,36 @@ export default function ScanResults() {
         </a>
       </div>
 
-      <div className="mt-8 flex flex-col items-center gap-8 rounded-xl border border-border dark:border-border-dark bg-panel dark:bg-panel-dark p-8 sm:flex-row sm:justify-around">
-        <RadialGauge score={scan.finalScore} size={200} strokeWidth={14} />
-        <div className="grid w-full max-w-xs gap-3">
-          {Object.entries(scan.subScores || {}).map(([key, val]) => (
-            <div key={key}>
-              <div className="mb-1 flex justify-between text-xs text-muted dark:text-muted-dark">
-                <span>{SUBSCORE_LABELS[key]}</span>
-                <span className="font-medium text-ink dark:text-ink-dark">{Math.round(val)}</span>
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-border dark:bg-border-dark">
-                <div className="h-1.5 rounded-full bg-accent-500" style={{ width: `${Math.min(100, val)}%` }} />
-              </div>
+      {isIncomplete ? (
+        <div className="mt-8 rounded-xl border border-severity-high/30 bg-severity-high/5 p-5">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-severity-high" />
+            <div>
+              <h2 className="font-semibold text-ink dark:text-ink-dark">Assessment incomplete</h2>
+              <p className="mt-1 text-sm text-muted dark:text-muted-dark">
+                {scan.error || 'A core security engine did not complete. Findings are shown below, but a comprehensive security score was not generated.'}
+              </p>
             </div>
-          ))}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="mt-8 flex flex-col items-center gap-8 rounded-xl border border-border dark:border-border-dark bg-panel dark:bg-panel-dark p-8 sm:flex-row sm:justify-around">
+          <RadialGauge score={scan.finalScore} size={200} strokeWidth={14} />
+          <div className="grid w-full max-w-xs gap-3">
+            {Object.entries(scan.subScores || {}).map(([key, val]) => (
+              <div key={key}>
+                <div className="mb-1 flex justify-between text-xs text-muted dark:text-muted-dark">
+                  <span>{SUBSCORE_LABELS[key]}</span>
+                  <span className="font-medium text-ink dark:text-ink-dark">{Math.round(val)}</span>
+                </div>
+                <div className="h-1.5 w-full rounded-full bg-border dark:bg-border-dark">
+                  <div className="h-1.5 rounded-full bg-accent-500" style={{ width: `${Math.min(100, val)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap gap-3 text-xs text-muted dark:text-muted-dark">
         <EngineChip label="npm audit" status={scan.engineStatus?.npmAudit} />
@@ -197,6 +213,11 @@ function CategorySection({ category, findings }) {
                 <p className="mt-1 font-data text-xs text-muted dark:text-muted-dark">
                   {f.file}
                   {f.line ? `:${f.line}` : ''}
+                </p>
+              )}
+              {f.engines?.length > 1 && (
+                <p className="mt-1 text-xs text-muted dark:text-muted-dark">
+                  Detected by: {f.engines.join(', ')}
                 </p>
               )}
             </div>
