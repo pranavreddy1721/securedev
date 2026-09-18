@@ -14,48 +14,42 @@ const NPM_SEVERITY_MAP = {
 };
 
 /**
- * Runs `npm audit --json` against the project directory (which must have a
- * package.json). Wraps the tool rather than reimplementing vulnerability
- * data — per the spec's core framing, npm audit's CVE database does the
- * real work here.
+ * Runs npm audit against an uploaded project.
+ *
+ * Determinism rule: do not generate a new lockfile during a scan. Generating
+ * one can resolve today's dependency tree from the registry, meaning the
+ * same ZIP can produce different results on different days. A project with
+ * package.json but no package-lock.json is therefore reported as unavailable
+ * for the npm audit engine instead of silently changing its dependency graph.
  */
 async function runNpmAuditScan(projectDir) {
   const pkgJsonPath = path.join(projectDir, 'package.json');
-  try {
-    await fs.access(pkgJsonPath);
-  } catch {
-    // No package.json — nothing for npm audit to check. Not a failure,
-    // just an empty result (e.g. a frontend-only zip, or a monorepo where
-    // package.json lives in a subfolder not yet supported in v1).
+  const lockPath = path.join(projectDir, 'package-lock.json');
+
+  const hasPackageJson = await fs
+    .access(pkgJsonPath)
+    .then(() => true)
+    .catch(() => false);
+
+  if (!hasPackageJson) {
     return { findings: [], skipped: true, reason: 'No package.json found at project root' };
+  }
+
+  const hasLock = await fs
+    .access(lockPath)
+    .then(() => true)
+    .catch(() => false);
+
+  if (!hasLock) {
+    throw new Error('package.json found, but package-lock.json is missing. npm audit was not run because generating a lockfile would make scan results non-deterministic.');
   }
 
   const timeoutMs = parseInt(process.env.NPM_AUDIT_TIMEOUT_MS || '60000', 10);
 
-  // Install first (audit needs a lockfile / node_modules resolution info).
-  // --package-lock-only avoids actually downloading node_modules, keeping
-  // this fast and side-effect-free in the ephemeral temp dir.
-  try {
-    await execFileAsync('npm', ['install', '--package-lock-only', '--ignore-scripts'], {
-      cwd: projectDir,
-      timeout: timeoutMs,
-    });
-  } catch (installErr) {
-    // Some projects won't resolve cleanly (private registries, etc). Try
-    // audit anyway if a lockfile already exists in the uploaded project.
-    const hasLock = await fs
-      .access(path.join(projectDir, 'package-lock.json'))
-      .then(() => true)
-      .catch(() => false);
-    if (!hasLock) {
-      throw new Error(`npm install failed and no existing lockfile to fall back on: ${installErr.message}`);
-    }
-  }
-
   let stdout;
   try {
-    // npm audit exits non-zero when vulnerabilities are found — that's
-    // expected, not a real error, so we read stdout from the caught error too.
+    // npm audit exits non-zero when vulnerabilities are found — that is an
+    // expected scan result, not a tool failure.
     const result = await execFileAsync('npm', ['audit', '--json'], {
       cwd: projectDir,
       timeout: timeoutMs,
@@ -80,12 +74,6 @@ async function runNpmAuditScan(projectDir) {
   return { findings: parseNpmAuditJson(parsed), skipped: false };
 }
 
-/**
- * npm audit's JSON shape differs between npm v6, v7-v8, and v9+.
- * This targets the v7+ `vulnerabilities` object format (npm >= 7),
- * which is what current Node LTS ships. v6's `advisories` array format
- * is intentionally not supported in v1 — flagged as a known limitation.
- */
 function parseNpmAuditJson(parsed) {
   const findings = [];
   const vulns = parsed.vulnerabilities || {};
@@ -110,7 +98,7 @@ function parseNpmAuditJson(parsed) {
       description: `Affects versions: ${vuln.range || 'unknown'}. ${
         vuln.fixAvailable ? 'A fix is available via npm audit fix.' : 'No automatic fix currently available.'
       }`,
-      file: 'package.json',
+      file: 'package-lock.json',
       line: null,
       engine: 'npm-audit',
       owaspRef: 'A06:2021 - Vulnerable and Outdated Components',
