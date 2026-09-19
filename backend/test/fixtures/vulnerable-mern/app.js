@@ -1,0 +1,23 @@
+const express = require('express');
+const multer = require('multer');
+const mongoose = require('mongoose');
+
+const app = express();
+const upload = multer({ dest: 'uploads/' });
+
+const JWT_SECRET = 'this-is-a-hardcoded-jwt-secret-12345';
+const AWS_SECRET_ACCESS_KEY = 'abcdefghijklmnopqrstuvwxyz1234567890ABCD1234';
+
+app.get('/admin/users', (req, res) => {
+  console.log('Authorization token:', req.headers.authorization);
+  res.json({ password: 'user-password', accessToken: JWT_SECRET });
+});
+
+app.post('/upload', upload.single('file'), (req, res) => {
+  const target = require('path').join('uploads', req.body.filename);
+  res.send(target);
+});
+
+mongoose.connect('mongodb://admin:password123@localhost:27017/testdb');
+
+module.exports = app;
