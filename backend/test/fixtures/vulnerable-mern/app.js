@@ -1,6 +1,5 @@
 const express = require('express');
 const multer = require('multer');
-const mongoose = require('mongoose');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
@@ -20,7 +19,5 @@ app.post('/upload', upload.single('file'), (req, res) => {
   const target = require('path').join('uploads', req.body.filename);
   res.send(target);
 });
-
-mongoose.connect('mongodb://admin:password123@localhost:27017/testdb');
 
 module.exports = app;
