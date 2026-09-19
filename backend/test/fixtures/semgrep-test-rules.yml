@@ -1,6 +1,6 @@
 rules:
   - id: securedev-test-eval
-    languages: [javascript]
+    languages: [generic]
     message: Avoid dynamic eval execution.
     severity: ERROR
-    pattern: eval(...)
+    pattern-regex: 'eval\\s*\\('
