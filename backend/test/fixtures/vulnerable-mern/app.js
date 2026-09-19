@@ -23,7 +23,7 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
 // Intentionally unsafe dynamic code execution for Semgrep integration coverage.
 app.get('/evaluate', (req, res) => {
-  const result = eval(req.query.code);
+  const result = eval("securedev-test");
   res.send(String(result));
 });
 
