@@ -18,7 +18,7 @@ securedev/
 │       ├── models/         Mongoose schemas: User, Project, Scan
 │       ├── middleware/     JWT auth, rate limiting, multer upload config, error handler
 │       ├── controllers/    Route handlers
-│       ├── routes/         Express routers
+│       ├── routes/          Express routers
 │       ├── scanners/       npm audit / secret / Semgrep / heuristic engine wrappers
 │       ├── orchestrator/   Runs all engines in parallel via Promise.allSettled
 │       ├── scoring/        Implements the weighted scoring formula
@@ -86,8 +86,11 @@ Visit `http://localhost:5173`.
 - No cloud storage — uploaded zips and cloned repos live in an ephemeral OS temp dir and are
   deleted after each scan. Re-scanning a zip-sourced project requires re-uploading.
 - npm audit parsing targets npm v7+'s JSON shape; npm v6's older `advisories` format isn't handled.
-- Semgrep uses public rulesets only (`p/javascript`, `p/react`, `p/nodejsscan`) — no custom
-  MERN-specific rules yet.
+- Semgrep uses the current public JavaScript/Node/Express rulesets (`p/javascript`, `p/nodejs`,
+  `p/expressjs`) and keeps the rule list configurable through `SEMGREP_RULESETS`. No custom
+  MERN-specific rules are bundled yet.
+- A scan is marked **incomplete** and does not receive a comprehensive score if a core engine
+  fails. This prevents missing scanner output from being interpreted as a clean result.
 
 ## Deployment
 
