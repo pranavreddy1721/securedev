@@ -3,5 +3,4 @@ rules:
     languages: [javascript]
     message: Avoid dynamic eval execution.
     severity: ERROR
-    patterns:
-      - pattern: eval(...)
+    pattern: eval(...)
