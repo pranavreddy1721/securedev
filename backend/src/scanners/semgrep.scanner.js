@@ -24,13 +24,13 @@ function classifyRuleId(ruleId = '') {
 }
 
 /**
- * Runs Semgrep against the project using public JavaScript/Node/Express
- * rulesets. The previous p/nodejsscan name is obsolete; current public
- * rulesets are p/nodejs and p/expressjs. Keeping these configurable allows
- * a deployment to pin/use a tested ruleset set without changing code.
+ * Runs Semgrep against the project using the Express ruleset by default.
+ * Express rules already build on the JavaScript/Node ecosystem coverage, so
+ * running three overlapping configs by default can duplicate findings.
+ * Deployments can pin a different set through SEMGREP_RULESETS.
  */
 async function runSemgrepScan(projectDir) {
-  const rulesets = (process.env.SEMGREP_RULESETS || 'p/javascript,p/nodejs,p/expressjs')
+  const rulesets = (process.env.SEMGREP_RULESETS || 'p/expressjs')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
