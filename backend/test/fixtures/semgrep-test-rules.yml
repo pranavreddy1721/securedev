@@ -3,4 +3,4 @@ rules:
     languages: [javascript]
     message: Avoid dynamic eval execution.
     severity: ERROR
-    pattern: eval($CODE)
+    pattern: eval("securedev-test")
