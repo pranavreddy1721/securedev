@@ -1,12 +1,7 @@
 /**
  * Regex-based secret detection patterns.
- * Flagged in the spec as "I'll want to review the regex patterns" — kept in
- * this single file, deliberately separate from scanner logic, so they're
- * easy to audit/tune without touching the scanning code.
- *
- * Each pattern: { name, regex, severity }
- * Regexes should be reasonably specific to avoid excessive false positives
- * (e.g. requiring a minimum key length) — tune as you review.
+ * Keep patterns specific enough to reduce false positives. This engine is
+ * intentionally heuristic; findings should be reviewed before remediation.
  */
 
 module.exports = [
@@ -17,7 +12,7 @@ module.exports = [
   },
   {
     name: 'AWS Secret Access Key (assignment)',
-    regex: /aws(.{0,20})?(secret|access)?[_-]?key\s*[:=]\s*['"][A-Za-z0-9/+=]{40}['"]/gi,
+    regex: /(?:aws[_-]?(?:secret|access)[_-]?key|aws_secret_access_key)\s*[:=]\s*['"][A-Za-z0-9/+=]{40}['"]/gi,
     severity: 'critical',
   },
   {
@@ -37,12 +32,12 @@ module.exports = [
   },
   {
     name: 'Generic API Key assignment',
-    regex: /api[_-]?key\s*[:=]\s*['"][A-Za-z0-9\-_]{16,}['"]/gi,
+    regex: /(?:api[_-]?key|apikey)\s*[:=]\s*['"][A-Za-z0-9\-_]{16,}['"]/gi,
     severity: 'high',
   },
   {
-    name: 'Private Key block (RSA/EC/PGP/OpenSSH)',
-    regex: /-----BEGIN (RSA|EC|PGP|OPENSSH|DSA) PRIVATE KEY-----/g,
+    name: 'Private Key block (RSA/EC/PGP/OpenSSH/DSA)',
+    regex: /-----BEGIN (?:RSA|EC|PGP|OPENSSH|DSA|PRIVATE) PRIVATE KEY-----/g,
     severity: 'critical',
   },
   {
@@ -51,18 +46,28 @@ module.exports = [
     severity: 'high',
   },
   {
-    name: 'Generic password assignment (hardcoded)',
-    regex: /(password|passwd|pwd)\s*[:=]\s*['"][^'"\s]{6,}['"]/gi,
-    severity: 'medium',
-  },
-  {
     name: 'GitHub Personal Access Token',
-    regex: /ghp_[A-Za-z0-9]{36}/g,
+    regex: /gh[pousr]_[A-Za-z0-9]{20,}/g,
     severity: 'critical',
   },
   {
     name: 'Stripe API Key',
-    regex: /sk_(live|test)_[0-9a-zA-Z]{24,}/g,
+    regex: /sk_(?:live|test)_[0-9a-zA-Z]{20,}/g,
     severity: 'critical',
+  },
+  {
+    name: 'Google OAuth Client Secret',
+    regex: /(?:client_secret|google_client_secret)\s*[:=]\s*['"][A-Za-z0-9._\-]{16,}['"]/gi,
+    severity: 'high',
+  },
+  {
+    name: 'Generic private token assignment',
+    regex: /(?:access[_-]?token|auth[_-]?token|client[_-]?secret)\s*[:=]\s*['"][A-Za-z0-9._\-+/=]{20,}['"]/gi,
+    severity: 'high',
+  },
+  {
+    name: 'Generic password assignment (hardcoded)',
+    regex: /(password|passwd|pwd)\s*[:=]\s*['"][^'"\s]{8,}['"]/gi,
+    severity: 'medium',
   },
 ];
