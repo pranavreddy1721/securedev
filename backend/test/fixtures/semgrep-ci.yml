@@ -1,0 +1,9 @@
+rules:
+  - id: securedev-ci-eval
+    languages: [javascript]
+    message: SecureDev CI Semgrep integration rule detected dynamic eval.
+    severity: ERROR
+    pattern: $FUNC($ARG)
+    metavariable-regex:
+      metavariable: $FUNC
+      regex: ^eval$
