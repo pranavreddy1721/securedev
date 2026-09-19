@@ -21,11 +21,23 @@ test('npm audit parser maps severities and preserves package findings', () => {
   assert.match(findings[0].title, /Prototype Pollution/);
 });
 
-test('Semgrep parser normalizes paths and classifies common rule IDs', () => {
-  assert.equal(classifyRuleId('javascript.express.security.xss'), 'xss');
-  assert.equal(classifyRuleId('javascript.nodejs.security.command-injection'), 'injectionFlaws');
-  assert.equal(classifyRuleId('javascript.express.security.cors'), 'securityMisconfiguration');
+test('Semgrep classifier covers the SecureDev vulnerability taxonomy', () => {
+  const classificationCases = [
+    ['javascript.express.security.xss', 'xss'],
+    ['javascript.nodejs.security.command-injection', 'injectionFlaws'],
+    ['javascript.express.security.cors', 'securityMisconfiguration'],
+    ['javascript.nodejs.security.jwt-auth', 'brokenAuthentication'],
+    ['javascript.nodejs.security.path-traversal', 'insecureFileUploads'],
+    ['javascript.express.security.access-control', 'brokenAccessControl'],
+    ['javascript.security.hardcoded-secret', 'hardcodedSecrets'],
+  ];
 
+  for (const [ruleId, expectedCategory] of classificationCases) {
+    assert.equal(classifyRuleId(ruleId), expectedCategory, ruleId);
+  }
+});
+
+test('Semgrep parser normalizes paths, severity, and OWASP metadata', () => {
   const findings = parseSemgrepJson({
     results: [{
       check_id: 'javascript.express.security.xss',
@@ -44,4 +56,6 @@ test('Semgrep parser normalizes paths and classifies common rule IDs', () => {
   assert.equal(findings[0].line, 12);
   assert.equal(findings[0].severity, 'high');
   assert.equal(findings[0].category, 'xss');
+  assert.equal(findings[0].heuristic, false);
+  assert.equal(findings[0].owaspRef, 'A03:2021');
 });
