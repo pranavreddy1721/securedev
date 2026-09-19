@@ -1,6 +1,0 @@
-rules:
-  - id: securedev-test-eval
-    languages: [javascript]
-    message: Avoid dynamic eval execution.
-    severity: ERROR
-    pattern: eval("securedev-test")
