@@ -1,0 +1,7 @@
+rules:
+  - id: securedev-deterministic-eval
+    languages:
+      - javascript
+    message: SecureDev deterministic Semgrep test: dynamic eval detected.
+    severity: ERROR
+    pattern: eval($VALUE)
