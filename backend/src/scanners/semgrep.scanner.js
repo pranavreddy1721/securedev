@@ -10,15 +10,11 @@ const SEMGREP_SEVERITY_MAP = {
 };
 
 // Maps common Semgrep rule-id substrings to our 9-category taxonomy.
-// Semgrep's public rulesets don't use our category names, so this is a
-// best-effort classifier — anything unmatched falls back to injectionFlaws
-// as a safe default bucket for "code pattern" issues under OWASP Compliance.
+// This is a best-effort classifier because public rulesets use their own IDs.
 function classifyRuleId(ruleId = '') {
   const id = ruleId.toLowerCase();
   if (id.includes('xss') || id.includes('dangerouslysetinnerhtml') || id.includes('innerhtml')) return 'xss';
-  if (id.includes('sql') || id.includes('nosql') || id.includes('command-injection') || id.includes('injection')) {
-    return 'injectionFlaws';
-  }
+  if (id.includes('sql') || id.includes('nosql') || id.includes('command-injection') || id.includes('injection')) return 'injectionFlaws';
   if (id.includes('jwt') || id.includes('auth') || id.includes('session')) return 'brokenAuthentication';
   if (id.includes('cors') || id.includes('helmet') || id.includes('header')) return 'securityMisconfiguration';
   if (id.includes('path-traversal') || id.includes('upload')) return 'insecureFileUploads';
@@ -28,17 +24,24 @@ function classifyRuleId(ruleId = '') {
 }
 
 /**
- * Runs Semgrep against the project using public rulesets only (per the
- * confirmed decision — no custom rule-writing in v1). Covers Injection
- * Flaws and XSS at meaningful depth; other categories may get incidental
- * hits but shouldn't be relied on for those.
+ * Runs Semgrep against the project using public JavaScript/Node/Express
+ * rulesets. The previous p/nodejsscan name is obsolete; current public
+ * rulesets are p/nodejs and p/expressjs. Keeping these configurable allows
+ * a deployment to pin/use a tested ruleset set without changing code.
  */
 async function runSemgrepScan(projectDir) {
-  const rulesets = (process.env.SEMGREP_RULESETS || 'p/javascript,p/react,p/nodejsscan').split(',');
-  const timeoutMs = parseInt(process.env.SEMGREP_TIMEOUT_MS || '120000', 10);
+  const rulesets = (process.env.SEMGREP_RULESETS || 'p/javascript,p/nodejs,p/expressjs')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 
+  if (rulesets.length === 0) {
+    throw new Error('SEMGREP_RULESETS is empty; at least one Semgrep ruleset is required.');
+  }
+
+  const timeoutMs = parseInt(process.env.SEMGREP_TIMEOUT_MS || '120000', 10);
   const args = ['scan', '--json', '--no-git-ignore', '--metrics=off'];
-  for (const rs of rulesets) args.push('--config', rs.trim());
+  for (const ruleset of rulesets) args.push('--config', ruleset);
   args.push(projectDir);
 
   let stdout;
@@ -50,12 +53,10 @@ async function runSemgrepScan(projectDir) {
     });
     stdout = result.stdout;
   } catch (err) {
-    // Semgrep exits 1 when findings exist — not a real failure.
-    if (err.stdout) {
-      stdout = err.stdout;
-    } else {
-      throw new Error(`Semgrep execution failed: ${err.message}`);
-    }
+    // Semgrep exits non-zero when findings exist; JSON on stdout is still a
+    // valid scan result. Treat it as a tool failure only when no JSON exists.
+    if (err.stdout) stdout = err.stdout;
+    else throw new Error(`Semgrep execution failed: ${err.message}`);
   }
 
   let parsed;
@@ -74,7 +75,10 @@ function parseSemgrepJson(parsed, projectDir) {
 
   for (const r of results) {
     const severity = SEMGREP_SEVERITY_MAP[r.extra?.severity] || 'medium';
-    const relPath = r.path?.startsWith(projectDir) ? r.path.slice(projectDir.length + 1) : r.path;
+    const resultPath = r.path || '';
+    const relPath = resultPath.startsWith(projectDir)
+      ? resultPath.slice(projectDir.length + 1)
+      : resultPath;
 
     findings.push({
       category: classifyRuleId(r.check_id),
