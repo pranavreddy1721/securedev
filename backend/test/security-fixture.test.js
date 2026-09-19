@@ -25,9 +25,9 @@ test('controlled fixture: heuristic scanner detects upload, auth and sensitive-d
   const findings = await runHeuristicScan(fixture);
   const found = titles(findings);
 
-  assert.ok(found.has('Potential broken access control'));
-  assert.ok(found.has('File upload without visible size limit'));
-  assert.ok(found.has('User-controlled path construction'));
-  assert.ok(found.has('Potential sensitive data in logs'));
-  assert.ok(found.has('Potential sensitive data exposure in response'));
+  assert.ok(found.has('Administrative route may lack an authorization/role check'));
+  assert.ok(found.has('Multer configured without upload limits'));
+  assert.ok(found.has('Possible path traversal via user-controlled path segment'));
+  assert.ok(found.has('Sensitive field logged to console'));
+  assert.ok(found.has('Sensitive field may be returned in an API response'));
 });
