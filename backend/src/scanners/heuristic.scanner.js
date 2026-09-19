@@ -2,6 +2,9 @@ const fs = require('fs/promises');
 const path = require('path');
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build']);
+const AUTH_MIDDLEWARE = /\b(?:requireAuth|authMiddleware|isAuthenticated|verifyToken|authenticate|passport\.authenticate|protect|requireLogin|ensureAuthenticated)\b/;
+const AUTHZ_MIDDLEWARE = /\b(?:authorize|requireRole|requirePermission|checkRole|checkPermission|isAdmin|adminOnly|rbac|acl|canAccess)\b/i;
+const SENSITIVE_ROUTE = /\/(?:admin|users?|accounts?|profiles?|settings|payments?|orders?|delete|update|manage|private|dashboard)(?:\/|$)/i;
 
 async function walkJsFiles(dir, files = []) {
   let entries;
@@ -23,130 +26,7 @@ async function walkJsFiles(dir, files = []) {
 }
 
 function lineOf(content, index) {
-  return content.slice(0, index).split('\n').length;
-}
-
-/**
- * Explicitly heuristic, pattern-based checks for:
- *  - Insecure File Uploads (path traversal / unrestricted multer config)
- *  - Broken Access Control (routes missing auth middleware)
- *  - Sensitive Data Exposure (logging of sensitive fields, kept DISTINCT
- *    from Secrets Detection — this is about runtime data, not embedded keys)
- * Plus static config checks feeding Broken Authentication and
- * Security Misconfiguration sub-scores.
- *
- * These are NOT exhaustive static/dataflow analysis — they're regex/AST-lite
- * pattern matches. Findings from this engine are marked heuristic: true and
- * the UI/report must surface that distinction, not present them as
- * equivalent-confidence to Semgrep/npm-audit findings.
- */
-async function runHeuristicScan(projectDir) {
-  const findings = [];
-  const files = await walkJsFiles(projectDir);
-
-  for (const filePath of files) {
-    let content;
-    try {
-      content = await fs.readFile(filePath, 'utf8');
-    } catch {
-      continue;
-    }
-    const relPath = path.relative(projectDir, filePath);
-
-    // --- Insecure File Uploads ---
-    if (/multer\s*\(\s*\)/.test(content) || /multer\.diskStorage\(/.test(content)) {
-      if (!/fileFilter\s*:/.test(content)) {
-        findings.push(makeFinding('insecureFileUploads', 'medium',
-          'Multer configured without a fileFilter',
-          'File uploads should restrict accepted MIME types/extensions to prevent malicious file execution.',
-          relPath, lineOf(content, content.indexOf('multer')), 'A04:2021 - Insecure Design'));
-      }
-      if (!/limits\s*:/.test(content)) {
-        findings.push(makeFinding('insecureFileUploads', 'low',
-          'Multer configured without upload size limits',
-          'Missing limits.fileSize allows unbounded uploads (DoS risk).',
-          relPath, lineOf(content, content.indexOf('multer')), 'A04:2021 - Insecure Design'));
-      }
-    }
-    if (/path\.join\([^)]*req\.(body|params|query)/.test(content)) {
-      findings.push(makeFinding('insecureFileUploads', 'high',
-        'Possible path traversal via user-controlled path segment',
-        'User input flows into path.join() for a filesystem path — validate/sanitize against traversal (../).',
-        relPath, lineOf(content, content.search(/path\.join\([^)]*req\.(body|params|query)/)), 'A01:2021 - Broken Access Control'));
-    }
-
-    // --- Broken Access Control (heuristic: route defined without nearby auth middleware) ---
-    const routeMatches = [...content.matchAll(/router\.(get|post|put|patch|delete)\(\s*['"`][^'"`]+['"`]\s*,/g)];
-    for (const m of routeMatches) {
-      const windowStart = Math.max(0, m.index - 20);
-      const windowEnd = Math.min(content.length, m.index + 200);
-      const nearby = content.slice(windowStart, windowEnd);
-      const looksProtected = /requireAuth|authMiddleware|isAuthenticated|verifyToken|passport\.authenticate/.test(nearby);
-      const looksSensitive = /\/(admin|users?|account|profile|settings|delete|update)/i.test(nearby);
-      if (looksSensitive && !looksProtected) {
-        findings.push(makeFinding('brokenAccessControl', 'medium',
-          'Route may be missing an authorization check',
-          'A route matching a sensitive path pattern was found with no recognizable auth middleware nearby. Verify manually — this is a heuristic, not a guarantee.',
-          relPath, lineOf(content, m.index), 'A01:2021 - Broken Access Control'));
-      }
-    }
-
-    // --- Sensitive Data Exposure (distinct from hardcoded secrets: this is about
-    // logging/handling of sensitive runtime values, not embedded credentials) ---
-    if (/console\.(log|info|debug)\([^)]*\b(password|token|secret|ssn|creditCard|card_number)\b/i.test(content)) {
-      findings.push(makeFinding('sensitiveDataExposure', 'high',
-        'Sensitive field logged to console',
-        'A variable named like a sensitive field (password/token/etc.) is passed to console.log. Sensitive data should never be logged in plaintext.',
-        relPath, lineOf(content, content.search(/console\.(log|info|debug)\([^)]*\b(password|token|secret|ssn|creditCard|card_number)\b/i)),
-        'A02:2021 - Cryptographic Failures'));
-    }
-    if (/schema\s*=\s*new\s+mongoose\.Schema\(\{[^}]*password[^}]*type\s*:\s*String/is.test(content) &&
-        !/select\s*:\s*false/i.test(content)) {
-      findings.push(makeFinding('sensitiveDataExposure', 'medium',
-        'Password field may not be excluded from query results',
-        'A Mongoose schema has a String field named password without select:false — it may be returned in API responses by default.',
-        relPath, null, 'A02:2021 - Cryptographic Failures'));
-    }
-
-    // --- Broken Authentication (static config checks) ---
-    if (/bcrypt\.(hash|genSalt)\([^)]*,\s*([1-9]|10)\s*[,)]/.test(content)) {
-      findings.push(makeFinding('brokenAuthentication', 'medium',
-        'bcrypt salt rounds below recommended minimum',
-        'Salt rounds under 11 are weaker than current best practice (10+ is often cited, 12 is a safer default for 2025+ hardware).',
-        relPath, lineOf(content, content.search(/bcrypt\.(hash|genSalt)/)), 'A07:2021 - Identification and Authentication Failures'));
-    }
-    if (/jwt\.sign\(\s*[^,]+,\s*[^,]+\)/.test(content) && !/expiresIn/.test(content)) {
-      findings.push(makeFinding('brokenAuthentication', 'high',
-        'JWT signed without an expiry',
-        'jwt.sign() called without an expiresIn option produces a token that never expires.',
-        relPath, lineOf(content, content.search(/jwt\.sign\(/)), 'A07:2021 - Identification and Authentication Failures'));
-    }
-
-    // --- Security Misconfiguration ---
-    if (/cors\(\s*\)/.test(content) || /origin\s*:\s*['"`]\*['"`]/.test(content)) {
-      findings.push(makeFinding('securityMisconfiguration', 'medium',
-        'Permissive CORS configuration',
-        'CORS is enabled with no origin restriction (or wildcard "*"), allowing any site to make credentialed requests.',
-        relPath, lineOf(content, content.search(/cors\(|origin\s*:\s*['"`]\*['"`]/)), 'A05:2021 - Security Misconfiguration'));
-    }
-  }
-
-  // Project-wide check: is Helmet used anywhere at all?
-  const anyHelmet = files.length > 0 && (await Promise.all(files.map(async (f) => {
-    try {
-      const c = await fs.readFile(f, 'utf8');
-      return /require\(['"]helmet['"]\)|from ['"]helmet['"]/.test(c);
-    } catch { return false; }
-  }))).some(Boolean);
-
-  if (!anyHelmet) {
-    findings.push(makeFinding('securityMisconfiguration', 'medium',
-      'Helmet.js not detected',
-      'No usage of the helmet package was found. Helmet sets a range of protective HTTP headers by default.',
-      null, null, 'A05:2021 - Security Misconfiguration'));
-  }
-
-  return findings;
+  return content.slice(0, Math.max(0, index)).split('\n').length;
 }
 
 function makeFinding(category, severity, title, description, file, line, owaspRef) {
@@ -161,6 +41,137 @@ function makeFinding(category, severity, title, description, file, line, owaspRe
     owaspRef: owaspRef || null,
     heuristic: true,
   };
+}
+
+/**
+ * Pattern-based security checks. This is intentionally heuristic rather than
+ * full AST/data-flow analysis; findings must be presented as such.
+ */
+async function runHeuristicScan(projectDir) {
+  const findings = [];
+  const files = await walkJsFiles(projectDir);
+
+  for (const filePath of files) {
+    let content;
+    try { content = await fs.readFile(filePath, 'utf8'); } catch { continue; }
+    const relPath = path.relative(projectDir, filePath);
+
+    // Insecure file uploads
+    const multerIndex = content.search(/multer\s*\(|multer\.diskStorage\(/);
+    if (multerIndex >= 0) {
+      if (!/fileFilter\s*:/.test(content)) {
+        findings.push(makeFinding('insecureFileUploads', 'medium',
+          'Multer configured without a fileFilter',
+          'File uploads should restrict accepted MIME types/extensions to reduce malicious-file risk.',
+          relPath, lineOf(content, multerIndex), 'A04:2021 - Insecure Design'));
+      }
+      if (!/limits\s*:/.test(content)) {
+        findings.push(makeFinding('insecureFileUploads', 'low',
+          'Multer configured without upload size limits',
+          'Missing limits.fileSize allows unbounded uploads and can increase denial-of-service risk.',
+          relPath, lineOf(content, multerIndex), 'A04:2021 - Insecure Design'));
+      }
+    }
+
+    const traversal = /path\.join\([^)]*req\.(body|params|query)/.exec(content);
+    if (traversal) {
+      findings.push(makeFinding('insecureFileUploads', 'high',
+        'Possible path traversal via user-controlled path segment',
+        'User input appears to flow into path.join() for a filesystem path. Validate and constrain the resolved path before filesystem access.',
+        relPath, lineOf(content, traversal.index), 'A01:2021 - Broken Access Control'));
+    }
+
+    // Authentication / authorization checks. Parse the route middleware list
+    // itself instead of looking at an arbitrary nearby text window. This
+    // greatly reduces false positives from unrelated auth code nearby.
+    const routeRegex = /(?:router|app)\.(get|post|put|patch|delete)\(\s*['"`]([^'"`]+)['"`]\s*,([^\n;]*)(?:\);|\n)/g;
+    for (const match of content.matchAll(routeRegex)) {
+      const route = match[2];
+      const middlewareAndHandler = match[3] || '';
+      const routeText = `${route} ${middlewareAndHandler}`;
+      const sensitive = SENSITIVE_ROUTE.test(route);
+      const hasAuth = AUTH_MIDDLEWARE.test(middlewareAndHandler);
+      const hasAuthz = AUTHZ_MIDDLEWARE.test(middlewareAndHandler);
+      const index = match.index || 0;
+
+      if (sensitive && !hasAuth) {
+        findings.push(makeFinding('brokenAuthentication', 'medium',
+          'Sensitive route may be missing authentication middleware',
+          `Route ${route} matches a sensitive-path pattern but no recognizable authentication middleware is present in its middleware list. Verify manually; this is heuristic.`,
+          relPath, lineOf(content, index), 'A07:2021 - Identification and Authentication Failures'));
+      }
+
+      // Only flag likely administrative/management routes. Ordinary user
+      // routes often need authentication but not necessarily role checks.
+      if (/\/(?:admin|manage|management)(?:\/|$)/i.test(route) && hasAuth && !hasAuthz) {
+        findings.push(makeFinding('brokenAccessControl', 'high',
+          'Administrative route may lack an authorization/role check',
+          `Route ${route} has recognizable authentication but no recognizable authorization middleware. Authentication alone does not establish that the caller has the required role.`,
+          relPath, lineOf(content, index), 'A01:2021 - Broken Access Control'));
+      }
+
+      // Avoid an unused variable warning while keeping routeText useful for
+      // future parser expansion.
+      void routeText;
+    }
+
+    // Sensitive runtime data logging
+    const sensitiveLog = /console\.(log|info|debug)\([^)]*\b(password|token|secret|ssn|creditCard|card_number)\b/i.exec(content);
+    if (sensitiveLog) {
+      findings.push(makeFinding('sensitiveDataExposure', 'high',
+        'Sensitive field logged to console',
+        'A variable named like a sensitive field is passed to console logging. Sensitive data should not be logged in plaintext.',
+        relPath, lineOf(content, sensitiveLog.index), 'A02:2021 - Cryptographic Failures'));
+    }
+
+    if (/schema\s*=\s*new\s+mongoose\.Schema\(\{[^}]*password[^}]*type\s*:\s*String/is.test(content) &&
+        !/select\s*:\s*false/i.test(content)) {
+      findings.push(makeFinding('sensitiveDataExposure', 'medium',
+        'Password field may not be excluded from query results',
+        'A Mongoose schema has a String password field without select:false. Review API serialization and query behavior to ensure passwords cannot be returned.',
+        relPath, null, 'A02:2021 - Cryptographic Failures'));
+    }
+
+    // Authentication configuration
+    const weakBcrypt = /bcrypt\.(hash|genSalt)\([^)]*,\s*(?:[1-9]|10)\s*[,)]/.exec(content);
+    if (weakBcrypt) {
+      findings.push(makeFinding('brokenAuthentication', 'medium',
+        'bcrypt salt rounds below recommended minimum',
+        'A low bcrypt work factor may provide less resistance to password cracking. Review the chosen cost factor for the deployment environment.',
+        relPath, lineOf(content, weakBcrypt.index), 'A07:2021 - Identification and Authentication Failures'));
+    }
+
+    const jwtNoExpiry = /jwt\.sign\(\s*[^,]+,\s*[^,]+\s*\)/.exec(content);
+    if (jwtNoExpiry && !/expiresIn/.test(content)) {
+      findings.push(makeFinding('brokenAuthentication', 'high',
+        'JWT may be signed without an expiry',
+        'jwt.sign() appears to omit an expiresIn option. Verify that issued tokens have an appropriate lifetime.',
+        relPath, lineOf(content, jwtNoExpiry.index), 'A07:2021 - Identification and Authentication Failures'));
+    }
+
+    // Security misconfiguration
+    const permissiveCors = /cors\(\s*\)/.exec(content) || /origin\s*:\s*['"`]\*['"`]/.exec(content);
+    if (permissiveCors) {
+      findings.push(makeFinding('securityMisconfiguration', 'medium',
+        'Permissive CORS configuration',
+        'CORS appears to allow requests without an origin restriction. Review whether this is appropriate for credentialed or sensitive endpoints.',
+        relPath, lineOf(content, permissiveCors.index), 'A05:2021 - Security Misconfiguration'));
+    }
+  }
+
+  const anyHelmet = files.length > 0 && (await Promise.all(files.map(async (file) => {
+    try { return /require\(['"]helmet['"]\)|from ['"]helmet['"]/.test(await fs.readFile(file, 'utf8')); }
+    catch { return false; }
+  }))).some(Boolean);
+
+  if (!anyHelmet) {
+    findings.push(makeFinding('securityMisconfiguration', 'medium',
+      'Helmet.js not detected',
+      'No usage of the helmet package was found. Review HTTP security headers and determine whether Helmet or an equivalent configuration is appropriate.',
+      null, null, 'A05:2021 - Security Misconfiguration'));
+  }
+
+  return findings;
 }
 
 module.exports = { runHeuristicScan };
