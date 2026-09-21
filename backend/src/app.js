@@ -17,11 +17,34 @@ function createApp() {
   // for in scanned projects, so it has to be present here too.
   app.use(helmet());
 
-  // CORS locked to the configured frontend origin (Cloudflare Pages domain
-  // in production), not a wildcard.
+  // CORS: normalize configured origins so a trailing slash in Render's
+  // CLIENT_ORIGIN does not break browser preflight requests. Multiple origins
+  // can be supplied as a comma-separated environment variable.
+  const configuredOrigins = (process.env.CLIENT_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+  const allowedOrigins = new Set([
+    ...configuredOrigins,
+    'https://securedev.pages.dev',
+    'http://localhost:5173',
+    'http://localhost:4173',
+  ]);
+
   app.use(
     cors({
-      origin: process.env.CLIENT_ORIGIN,
+      origin(origin, callback) {
+        // Non-browser/server-to-server requests do not send an Origin header.
+        if (!origin) return callback(null, true);
+
+        const normalizedOrigin = origin.trim().replace(/\/+$/, '');
+        if (allowedOrigins.has(normalizedOrigin)) {
+          return callback(null, true);
+        }
+
+        return callback(new Error('CORS origin not allowed'));
+      },
       credentials: true,
     })
   );
