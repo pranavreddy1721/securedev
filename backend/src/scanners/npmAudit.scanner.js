@@ -13,55 +13,42 @@ const NPM_SEVERITY_MAP = {
   info: 'low',
 };
 
-/**
- * Runs npm audit against an uploaded project.
- *
- * Determinism rule: do not generate a new lockfile during a scan. Generating
- * one can resolve today's dependency tree from the registry, meaning the
- * same ZIP can produce different results on different days. A project with
- * package.json but no package-lock.json is therefore reported as unavailable
- * for the npm audit engine instead of silently changing its dependency graph.
- */
-async function runNpmAuditScan(projectDir) {
-  const pkgJsonPath = path.join(projectDir, 'package.json');
-  const lockPath = path.join(projectDir, 'package-lock.json');
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache']);
 
-  const hasPackageJson = await fs
-    .access(pkgJsonPath)
-    .then(() => true)
-    .catch(() => false);
+async function findNpmProjects(projectDir, currentDir = projectDir, depth = 0, results = []) {
+  if (depth > 4) return results;
 
-  if (!hasPackageJson) {
-    return { findings: [], skipped: true, reason: 'No package.json found at project root' };
+  const entries = await fs.readdir(currentDir, { withFileTypes: true }).catch(() => []);
+  const hasPackageJson = entries.some((entry) => entry.isFile() && entry.name === 'package.json');
+  const hasLock = entries.some((entry) => entry.isFile() && entry.name === 'package-lock.json');
+
+  if (hasPackageJson && hasLock) {
+    results.push(currentDir);
+    return results;
   }
 
-  const hasLock = await fs
-    .access(lockPath)
-    .then(() => true)
-    .catch(() => false);
-
-  if (!hasLock) {
-    throw new Error('package.json found, but package-lock.json is missing. npm audit was not run because generating a lockfile would make scan results non-deterministic.');
+  for (const entry of entries) {
+    if (!entry.isDirectory() || IGNORED_DIRS.has(entry.name)) continue;
+    await findNpmProjects(projectDir, path.join(currentDir, entry.name), depth + 1, results);
   }
 
+  return results;
+}
+
+async function runAuditForDirectory(projectDir, auditDir) {
   const timeoutMs = parseInt(process.env.NPM_AUDIT_TIMEOUT_MS || '60000', 10);
-
   let stdout;
+
   try {
-    // npm audit exits non-zero when vulnerabilities are found — that is an
-    // expected scan result, not a tool failure.
-    const result = await execFileAsync('npm', ['audit', '--json'], {
-      cwd: projectDir,
+    const result = await execFileAsync('npm', ['audit', '--json', '--package-lock-only'], {
+      cwd: auditDir,
       timeout: timeoutMs,
       maxBuffer: 1024 * 1024 * 20,
     });
     stdout = result.stdout;
   } catch (err) {
-    if (err.stdout) {
-      stdout = err.stdout;
-    } else {
-      throw new Error(`npm audit failed to produce output: ${err.message}`);
-    }
+    if (err.stdout) stdout = err.stdout;
+    else throw new Error(`npm audit failed to produce output: ${err.message}`);
   }
 
   let parsed;
@@ -71,25 +58,61 @@ async function runNpmAuditScan(projectDir) {
     throw new Error(`Failed to parse npm audit JSON output: ${err.message}`);
   }
 
-  return { findings: parseNpmAuditJson(parsed), skipped: false };
+  const relativeDir = path.relative(projectDir, auditDir).replace(/\\/g, '/');
+  return parseNpmAuditJson(parsed, relativeDir);
 }
 
-function parseNpmAuditJson(parsed) {
+/**
+ * MERN repositories often contain separate lockfiles in frontend/ and backend/.
+ * Audit every deterministic package-lock.json instead of requiring one at the
+ * repository root. No lockfile is generated during a scan.
+ */
+async function runNpmAuditScan(projectDir) {
+  const packageDirs = await findNpmProjects(projectDir);
+
+  if (packageDirs.length === 0) {
+    return {
+      findings: [],
+      skipped: true,
+      reason: 'No package.json + package-lock.json pair found in the project',
+    };
+  }
+
+  const results = await Promise.allSettled(packageDirs.map((dir) => runAuditForDirectory(projectDir, dir)));
+  const successful = results.filter((result) => result.status === 'fulfilled');
+  const failed = results.filter((result) => result.status === 'rejected');
+
+  if (successful.length === 0) {
+    throw new Error(failed[0]?.reason?.message || 'npm audit failed for all detected Node projects');
+  }
+
+  if (failed.length > 0) {
+    console.warn(`[npm-audit] ${failed.length} project audit(s) failed; using successful audit results.`);
+  }
+
+  return {
+    findings: successful.flatMap((result) => result.value),
+    skipped: false,
+    projectsAudited: successful.length,
+    projectsFailed: failed.length,
+  };
+}
+
+function parseNpmAuditJson(parsed, projectRelativeDir = '') {
   const findings = [];
   const vulns = parsed.vulnerabilities || {};
+  const lockFile = projectRelativeDir ? `${projectRelativeDir}/package-lock.json` : 'package-lock.json';
 
   for (const [pkgName, vuln] of Object.entries(vulns)) {
     const severity = NPM_SEVERITY_MAP[vuln.severity] || 'medium';
     const viaEntries = Array.isArray(vuln.via) ? vuln.via : [];
-
     const advisoryTitles = viaEntries
       .filter((v) => typeof v === 'object' && v.title)
       .map((v) => v.title);
 
-    const title =
-      advisoryTitles.length > 0
-        ? `${pkgName}: ${advisoryTitles[0]}`
-        : `${pkgName}: known vulnerability (${vuln.severity})`;
+    const title = advisoryTitles.length > 0
+      ? `${pkgName}: ${advisoryTitles[0]}`
+      : `${pkgName}: known vulnerability (${vuln.severity})`;
 
     findings.push({
       category: 'vulnerableDependencies',
@@ -98,7 +121,7 @@ function parseNpmAuditJson(parsed) {
       description: `Affects versions: ${vuln.range || 'unknown'}. ${
         vuln.fixAvailable ? 'A fix is available via npm audit fix.' : 'No automatic fix currently available.'
       }`,
-      file: 'package-lock.json',
+      file: lockFile,
       line: null,
       engine: 'npm-audit',
       owaspRef: 'A06:2021 - Vulnerable and Outdated Components',
@@ -109,4 +132,4 @@ function parseNpmAuditJson(parsed) {
   return findings;
 }
 
-module.exports = { runNpmAuditScan, parseNpmAuditJson };
+module.exports = { runNpmAuditScan, parseNpmAuditJson, findNpmProjects };
