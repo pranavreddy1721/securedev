@@ -88,19 +88,24 @@ async function analyzeFindingWithAi(req, res, next) {
       return res.status(503).json({ error: err.message, code: err.code });
     }
 
+    if (err.code === 'AI_NETWORK_ERROR') {
+      return res.status(502).json({
+        error: 'SecureDev could not reach the Gemini API. Check Render network access and GEMINI_API_KEY, then try again.',
+        code: err.code,
+      });
+    }
+
     if (err.code === 'AI_PROVIDER_ERROR') {
       const status = Number(err.statusCode);
-      // Do not expose provider internals or credentials to the browser. The
-      // service logs the provider message on Render for debugging.
-      if (status === 401 || status === 403) {
+      if (status === 400 || status === 401 || status === 403) {
         return res.status(502).json({
-          error: 'Gemini authentication or API access failed. Check the GEMINI_API_KEY and its API restrictions in Render.',
+          error: 'Gemini rejected the request. Verify that GEMINI_API_KEY is a current Gemini authorization key with Gemini API access, and that GEMINI_MODEL is available to the key.',
           code: err.code,
         });
       }
       if (status === 404) {
         return res.status(502).json({
-          error: 'The configured Gemini model was not found or is not available to this API key. Check GEMINI_MODEL in Render.',
+          error: 'The configured Gemini model or Interactions API endpoint was not found. Check GEMINI_MODEL in Render.',
           code: err.code,
         });
       }
