@@ -27,20 +27,26 @@ function deduplicateFindings(findings = []) {
     const key = findingKey(finding);
     const existing = merged.get(key);
     if (!existing) {
-      merged.set(key, { ...finding, engines: finding.engine ? [finding.engine] : [] });
+      merged.set(key, {
+        ...finding,
+        file: normalizePath(finding.file || ''),
+        title: normalizeTitle(finding.title || ''),
+        engines: finding.engine ? [finding.engine] : [],
+      });
       continue;
     }
+
     if (finding.engine && !existing.engines.includes(finding.engine)) existing.engines.push(finding.engine);
+    existing.engines.sort();
+    existing.engine = existing.engines[0] || existing.engine;
     if ((SEVERITY_RANK[finding.severity] || 0) > (SEVERITY_RANK[existing.severity] || 0)) existing.severity = finding.severity;
-    if (!existing.file && finding.file) existing.file = finding.file;
+    if (!existing.file && finding.file) existing.file = normalizePath(finding.file);
     if (!existing.line && finding.line) existing.line = finding.line;
     if (!existing.description && finding.description) existing.description = finding.description;
     if (!existing.owaspRef && finding.owaspRef) existing.owaspRef = finding.owaspRef;
     existing.heuristic = Boolean(existing.heuristic && finding.heuristic);
   }
 
-  // Stable ordering prevents identical scans from producing different result
-  // order merely because scanner completion order changed.
   return Array.from(merged.values()).sort((a, b) => findingKey(a).localeCompare(findingKey(b)));
 }
 
