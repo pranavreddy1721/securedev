@@ -136,6 +136,10 @@ function drawPageChrome(doc, pageNumber) {
     .text(`SecureDev Security Report  |  Page ${pageNumber}`, PAGE.left, doc.page.height - 42, {
       width: PAGE.width,
       align: 'center',
+      // Footer text is intentionally outside the normal content area. Prevent
+      // PDFKit's line wrapper from treating it as a content overflow and
+      // calling addPage(), which would recursively fire pageAdded.
+      lineBreak: false,
     });
   doc.restore();
 }
@@ -287,280 +291,161 @@ function drawEngineCoverage(doc, scan) {
     doc.roundedRect(PAGE.left, y, PAGE.width, 55, 8).fill('#ffffff').stroke(COLORS.border);
     doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.ink).text(name, PAGE.left + 12, y + 10);
     doc.font('Helvetica').fontSize(8.3).fillColor(COLORS.muted)
-      .text(explanation, PAGE.left + 12, y + 26, { width: 350 });
+      .text(explanation, PAGE.left + 12, y + 26, { width: 360 });
     doc.font('Helvetica-Bold').fontSize(8.5).fillColor(color)
-      .text(humanStatus(status), PAGE.left + 402, y + 19, { width: 74, align: 'right' });
-    doc.y = y + 67;
+      .text(status || 'unknown', PAGE.left + 410, y + 12, { width: 65, align: 'right' });
+    doc.y = y + 66;
   });
 }
 
 function drawFindings(doc, scan) {
-  const findings = [...(scan.findings || [])]
-    .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
+  const grouped = {};
+  for (const finding of scan.findings || []) {
+    if (!grouped[finding.category]) grouped[finding.category] = [];
+    grouped[finding.category].push(finding);
+  }
 
-  if (!findings.length) {
-    infoBox(doc, 'No findings detected', 'The completed scanners did not report an issue. This does not guarantee that the application is completely secure.', COLORS.greenLight, '#166534');
+  Object.values(grouped).forEach((items) => items.sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9)));
+
+  const categories = Object.entries(grouped);
+  if (!categories.length) {
+    ensureSpace(doc, 110);
+    infoBox(doc, 'No issues detected', 'The completed security checks did not report any findings. This does not guarantee that the application is completely secure.', COLORS.greenLight, '#166534');
     return;
   }
 
-  drawSeveritySummary(doc, severityCounts(findings));
+  categories.forEach(([category, items]) => {
+    ensureSpace(doc, 78);
+    sectionTitle(doc, CATEGORY_LABELS[category] || category, CATEGORY_EXPLANATIONS[category] || 'Security findings reported for this category.');
 
-  const byCategory = {};
-  findings.forEach((finding) => {
-    if (!byCategory[finding.category]) byCategory[finding.category] = [];
-    byCategory[finding.category].push(finding);
-  });
+    items.forEach((finding) => drawFindingCard(doc, finding, category));
 
-  Object.entries(byCategory).forEach(([category, categoryFindings]) => {
-    drawCategory(doc, category, categoryFindings);
+    infoBox(doc, 'Recommended next step', CATEGORY_ACTIONS[category] || 'Review the reported code, apply the suggested remediation, and run the scan again.', COLORS.soft, COLORS.text);
   });
 }
 
-function drawSeveritySummary(doc, counts) {
-  sectionTitle(doc, 'Severity summary', 'Severity describes the potential impact if a finding is real and reachable.');
-  const items = [
-    ['Critical', counts.critical, 'Immediate attention', 'critical'],
-    ['High', counts.high, 'Prompt attention', 'high'],
-    ['Medium', counts.medium, 'Review and fix', 'medium'],
-    ['Low', counts.low, 'Monitor / improve', 'low'],
-  ];
-  const gap = 9;
-  const w = (PAGE.width - gap * 3) / 4;
-  ensureSpace(doc, 65);
-  const y = doc.y;
-  items.forEach((item, i) => {
-    const x = PAGE.left + i * (w + gap);
-    doc.roundedRect(x, y, w, 55, 8).fill(SEVERITY_BG[item[3]]).stroke(SEVERITY_BG[item[3]]);
-    doc.font('Helvetica-Bold').fontSize(16).fillColor(SEVERITY_COLORS[item[3]])
-      .text(String(item[1]), x + 10, y + 8);
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(COLORS.text)
-      .text(item[0], x + 10, y + 29);
-    doc.font('Helvetica').fontSize(6.8).fillColor(COLORS.muted)
-      .text(item[2], x + 10, y + 41, { width: w - 20 });
-  });
-  doc.y = y + 68;
-}
-
-function drawCategory(doc, category, findings) {
-  const label = CATEGORY_LABELS[category] || humanize(category);
-  const explanation = CATEGORY_EXPLANATIONS[category] || 'A security-related issue was detected in this category.';
-  const heuristic = HEURISTIC_CATEGORIES.includes(category);
-
-  const firstFindingHeight = measureFindingCard(doc, findings[0], category, true);
-  const introHeight = 38 + 10 + measureInfoBox(doc, explanation, true) + (heuristic ? 8 + measureInfoBox(doc, 'This category uses lightweight heuristics and is not exhaustive. Verify the result manually.', true) : 0);
-  ensureSpace(doc, introHeight + Math.min(firstFindingHeight, 220) + 18);
-
-  const headerY = doc.y;
-  doc.roundedRect(PAGE.left, headerY, PAGE.width, 36, 8).fill(COLORS.blueLight);
-  doc.font('Helvetica-Bold').fontSize(11).fillColor(COLORS.ink)
-    .text(label, PAGE.left + 12, headerY + 10, { width: 350 });
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(COLORS.text)
-    .text(`${findings.length} issue${findings.length === 1 ? '' : 's'}`, PAGE.left + 390, headerY + 11, { width: 90, align: 'right' });
-  doc.y = headerY + 46;
-
-  infoBox(doc, 'In simple terms', explanation, '#ffffff', COLORS.text, true);
-  if (heuristic) {
-    infoBox(doc, 'Pattern-based check', 'This category uses lightweight heuristics and is not exhaustive. Verify the result manually.', COLORS.amberLight, '#92400e', true);
-  }
-
-  findings.forEach((finding, index) => {
-    drawFindingCard(doc, finding, category, index + 1, findings.length);
-  });
-}
-
-function measureInfoBox(doc, text, compact) {
-  const size = compact ? 7.8 : 8.4;
-  const bodyHeight = doc.heightOfString(String(text), { width: PAGE.width - 28, font: 'Helvetica', fontSize: size, lineGap: 1.6 });
-  return bodyHeight + (compact ? 28 : 34) + 8;
-}
-
-function measureFindingCard(doc, finding, category, includeMargins = false) {
-  const title = finding.title || 'Security finding';
+function drawFindingCard(doc, finding, category) {
   const severity = String(finding.severity || 'medium').toLowerCase();
-  const description = finding.description || CATEGORY_EXPLANATIONS[category] || 'A security-related issue was detected.';
-  const action = CATEGORY_ACTIONS[category] || 'Review the reported code, apply the appropriate security fix, and run the scan again.';
-  const technical = finding.message || finding.detail || finding.evidence || '';
-  const location = formatLocation(finding.file, finding.line);
-  const detectedBy = finding.engines?.length ? finding.engines.join(', ') : finding.engine;
-  const ref = finding.owaspRef;
+  const title = finding.title || finding.ruleId || 'Security finding';
+  const description = finding.description || 'The scanner reported a potential security issue.';
+  const file = finding.file || finding.path || 'Location not provided';
+  const line = finding.line ? `Line ${finding.line}` : '';
+  const evidence = finding.evidence || finding.snippet || '';
+  const impact = finding.impact || plainImpact(severity);
+  const remediation = finding.remediation || finding.fix || 'Review the affected code and apply a secure implementation.';
 
-  const headerHeight = 46;
-  let body = 14;
-  body += measureFindingBlock(doc, description, 8.2);
-  body += measureFindingBlock(doc, severityImpact(severity), 8.2);
-  body += measureFindingBlock(doc, action, 8.2);
-  if (technical) body += measureFindingBlock(doc, technical, 7.8);
+  const titleHeight = doc.heightOfString(title, { width: PAGE.width - 155, font: 'Helvetica-Bold', size: 10.5, lineGap: 1 });
+  const descHeight = doc.heightOfString(description, { width: PAGE.width - 32, font: 'Helvetica', size: 8.5, lineGap: 2 });
+  const evidenceHeight = evidence ? doc.heightOfString(String(evidence), { width: PAGE.width - 44, font: 'Courier', size: 7.2, lineGap: 1 }) : 0;
+  const impactHeight = doc.heightOfString(impact, { width: PAGE.width - 32, font: 'Helvetica', size: 8.2, lineGap: 2 });
+  const remediationHeight = doc.heightOfString(remediation, { width: PAGE.width - 32, font: 'Helvetica', size: 8.2, lineGap: 2 });
+  const cardHeight = Math.max(150, 48 + titleHeight + descHeight + impactHeight + remediationHeight + (evidence ? evidenceHeight + 38 : 0) + (file ? 28 : 0));
 
-  const meta = [];
-  if (location) meta.push(['Location', location]);
-  if (detectedBy) meta.push(['Detected by', detectedBy]);
-  if (ref) meta.push(['Reference', ref]);
-  if (meta.length) body += 5 + 20 + meta.length * 14 + 8;
-  body += 29;
-
-  doc.font('Helvetica-Bold').fontSize(10.5);
-  const titleHeight = doc.heightOfString(title, { width: PAGE.width - 180, lineGap: 1 });
-  const height = Math.max(160, headerHeight + Math.max(0, titleHeight - 18) + body + 10);
-  return includeMargins ? height + 10 : height;
-}
-
-function measureFindingBlock(doc, text, size) {
-  const width = PAGE.width - 50;
-  const bodyHeight = doc.heightOfString(String(text), { width, font: 'Helvetica', fontSize: size, lineGap: 1.5 });
-  return Math.max(42, bodyHeight + 28) + 8;
-}
-
-function drawFindingCard(doc, finding, category, index, total) {
-  const title = finding.title || 'Security finding';
-  const severity = String(finding.severity || 'medium').toLowerCase();
-  const description = finding.description || CATEGORY_EXPLANATIONS[category] || 'A security-related issue was detected.';
-  const action = CATEGORY_ACTIONS[category] || 'Review the reported code, apply the appropriate security fix, and run the scan again.';
-  const technical = finding.message || finding.detail || finding.evidence || '';
-  const location = formatLocation(finding.file, finding.line);
-  const detectedBy = finding.engines?.length ? finding.engines.join(', ') : finding.engine;
-  const ref = finding.owaspRef;
-  const cardHeight = measureFindingCard(doc, finding, category);
-
-  if (cardHeight > contentBottom(doc) - doc.y) {
-    doc.addPage();
-    drawPageHeader(doc, 'Finding details', 'Continuing the detailed findings from the previous page.');
-  }
-
+  ensureSpace(doc, cardHeight + 14);
   const y = doc.y;
   doc.roundedRect(PAGE.left, y, PAGE.width, cardHeight, 10).fill('#ffffff').stroke(COLORS.border);
-  doc.roundedRect(PAGE.left, y, PAGE.width, 46, 10).fill(COLORS.soft);
-  doc.rect(PAGE.left, y + 36, PAGE.width, 10).fill(COLORS.soft);
 
-  const badgeWidth = Math.max(55, doc.widthOfString(severity.toUpperCase()) + 18);
-  doc.roundedRect(PAGE.left + 12, y + 12, badgeWidth, 20, 7).fill(SEVERITY_BG[severity] || '#f1f5f9');
-  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(SEVERITY_COLORS[severity] || COLORS.text)
-    .text(severity.toUpperCase(), PAGE.left + 12, y + 18, { width: badgeWidth, align: 'center' });
+  const badgeWidth = 62;
+  doc.roundedRect(PAGE.left + 12, y + 12, badgeWidth, 19, 9).fill(SEVERITY_BG[severity] || SEVERITY_BG.medium);
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(SEVERITY_COLORS[severity] || SEVERITY_COLORS.medium)
+    .text(severity.toUpperCase(), PAGE.left + 12, y + 17, { width: badgeWidth, align: 'center' });
 
   doc.font('Helvetica-Bold').fontSize(10.5).fillColor(COLORS.ink)
-    .text(title, PAGE.left + 82, y + 14, { width: PAGE.width - 180, lineGap: 1 });
-  doc.font('Helvetica').fontSize(7.5).fillColor(COLORS.muted)
-    .text(`${index} of ${total}`, PAGE.left + PAGE.width - 60, y + 18, { width: 48, align: 'right' });
+    .text(title, PAGE.left + 86, y + 12, { width: PAGE.width - 100, lineGap: 1 });
 
-  let cursor = y + 60;
-  cursor = findingBlock(doc, 'In simple terms', description, cursor, COLORS.soft, COLORS.text);
-  cursor = findingBlock(doc, 'Why it matters', severityImpact(severity), cursor, COLORS.soft, COLORS.text);
-  cursor = findingBlock(doc, 'Recommended next step', action, cursor, COLORS.greenLight, '#166534');
-  if (technical) cursor = findingBlock(doc, 'Technical detail', technical, cursor, '#ffffff', COLORS.text, true);
+  let cursor = y + 38 + titleHeight;
+  doc.font('Helvetica').fontSize(8.5).fillColor(COLORS.text)
+    .text(description, PAGE.left + 16, cursor, { width: PAGE.width - 32, lineGap: 2 });
+  cursor += descHeight + 9;
 
-  const meta = [];
-  if (location) meta.push(['Location', location]);
-  if (detectedBy) meta.push(['Detected by', detectedBy]);
-  if (ref) meta.push(['Reference', ref]);
-  if (meta.length) {
-    const metaHeight = 20 + meta.length * 14;
-    doc.roundedRect(PAGE.left + 12, cursor + 5, PAGE.width - 24, metaHeight, 7).fill(COLORS.soft);
-    meta.forEach(([label, value], i) => {
-      const rowY = cursor + 12 + i * 14;
-      doc.font('Helvetica-Bold').fontSize(7.2).fillColor(COLORS.muted)
-        .text(label, PAGE.left + 22, rowY, { width: 62 });
-      doc.font('Helvetica').fontSize(7.4).fillColor(COLORS.text)
-        .text(String(value), PAGE.left + 86, rowY, { width: PAGE.width - 120, lineGap: 1 });
-    });
-    cursor += metaHeight + 8;
+  if (file) {
+    doc.font('Helvetica-Bold').fontSize(7.8).fillColor(COLORS.muted).text('WHERE:', PAGE.left + 16, cursor);
+    doc.font('Courier').fontSize(7.6).fillColor(COLORS.text).text(`${file}${line ? ` • ${line}` : ''}`, PAGE.left + 55, cursor, { width: PAGE.width - 71 });
+    cursor += 22;
   }
 
-  doc.font('Helvetica').fontSize(7.2).fillColor(COLORS.muted)
-    .text('Review the finding in context before making changes. A scanner result is evidence to investigate, not proof that an exploit is possible.', PAGE.left + 14, cursor + 4, {
-      width: PAGE.width - 28,
-      lineGap: 1.5,
-    });
+  if (evidence) {
+    doc.font('Helvetica-Bold').fontSize(7.8).fillColor(COLORS.muted).text('EVIDENCE:', PAGE.left + 16, cursor);
+    cursor += 12;
+    doc.roundedRect(PAGE.left + 16, cursor, PAGE.width - 32, evidenceHeight + 12, 6).fill(COLORS.soft);
+    doc.font('Courier').fontSize(7.2).fillColor(COLORS.text)
+      .text(String(evidence), PAGE.left + 22, cursor + 6, { width: PAGE.width - 44, lineGap: 1 });
+    cursor += evidenceHeight + 20;
+  }
 
-  doc.y = y + cardHeight + 12;
-}
+  doc.font('Helvetica-Bold').fontSize(7.8).fillColor(COLORS.muted).text('WHY IT MATTERS:', PAGE.left + 16, cursor);
+  cursor += 12;
+  doc.font('Helvetica').fontSize(8.2).fillColor(COLORS.text)
+    .text(impact, PAGE.left + 16, cursor, { width: PAGE.width - 32, lineGap: 2 });
+  cursor += impactHeight + 9;
 
-function findingBlock(doc, title, text, y, background, titleColor, technical = false) {
-  const width = PAGE.width - 28;
-  const bodyWidth = width - 22;
-  const bodySize = technical ? 7.8 : 8.2;
-  const bodyHeight = doc.heightOfString(String(text), { width: bodyWidth, font: 'Helvetica', fontSize: bodySize, lineGap: 1.5 });
-  const height = Math.max(42, bodyHeight + 28);
+  doc.font('Helvetica-Bold').fontSize(7.8).fillColor(COLORS.muted).text('WHAT TO DO:', PAGE.left + 16, cursor);
+  cursor += 12;
+  doc.font('Helvetica').fontSize(8.2).fillColor(COLORS.text)
+    .text(remediation, PAGE.left + 16, cursor, { width: PAGE.width - 32, lineGap: 2 });
 
-  doc.roundedRect(PAGE.left + 14, y, width, height, 7)
-    .fill(background)
-    .stroke(background === '#ffffff' ? COLORS.border : background);
-  doc.font('Helvetica-Bold').fontSize(7.8).fillColor(titleColor)
-    .text(title, PAGE.left + 24, y + 9);
-  doc.font('Helvetica').fontSize(bodySize).fillColor(COLORS.text)
-    .text(String(text), PAGE.left + 24, y + 22, { width: bodyWidth, lineGap: 1.5 });
-  return y + height + 8;
+  doc.y = y + cardHeight + 10;
 }
 
 function drawMethodology(doc, scan) {
-  sectionTitle(doc, 'The scanning process', 'SecureDev combines scanner results into one readable assessment.');
-  const steps = [
-    ['1', 'Project preparation', 'SecureDev prepares the uploaded project or connected GitHub repository for scanning.'],
-    ['2', 'Security checks', 'npm audit checks dependencies, the secret scanner looks for secret-like values, and Semgrep checks source-code patterns.'],
-    ['3', 'Finding normalization', 'Duplicate detections are merged so the same issue is not counted repeatedly simply because multiple checks reported it.'],
-    ['4', 'Scoring', 'Findings are converted into category sub-scores and combined using the configured weighted scoring model.'],
-    ['5', 'Report generation', 'The findings, score, coverage, limitations, and recommended next steps are presented in this report.'],
+  sectionTitle(doc, 'What SecureDev scanned', 'SecureDev combines several focused checks into one assessment.');
+  const rows = [
+    ['1. Dependencies', 'npm audit checks project packages against known vulnerability advisories.'],
+    ['2. Secrets', 'The secret scanner searches project files for credential-like values that should not be committed.'],
+    ['3. Source code', 'Semgrep applies security rules to source code to identify potentially unsafe patterns.'],
+    ['4. Heuristics', 'Additional lightweight checks look for common application-security risks such as unsafe uploads, access-control gaps, and sensitive response fields.'],
+    ['5. Normalization', 'Duplicate detections are combined so the same underlying issue is not counted repeatedly.'],
+    ['6. Scoring', 'Five weighted security areas are combined into the final score.'],
   ];
 
-  steps.forEach(([number, title, text]) => {
-    const textHeight = doc.heightOfString(text, { width: PAGE.width - 50, font: 'Helvetica', fontSize: 8.4, lineGap: 1.8 });
-    ensureSpace(doc, Math.max(58, textHeight + 32) + 6);
+  rows.forEach(([label, text]) => {
+    ensureSpace(doc, 70);
     const y = doc.y;
-    doc.circle(PAGE.left + 15, y + 15, 11).fill(COLORS.accent);
-    doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff')
-      .text(number, PAGE.left + 10.5, y + 11, { width: 9, align: 'center' });
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(COLORS.ink)
-      .text(title, PAGE.left + 38, y + 6);
-    doc.font('Helvetica').fontSize(8.4).fillColor(COLORS.text)
-      .text(text, PAGE.left + 38, y + 22, { width: PAGE.width - 50, lineGap: 1.8 });
-    doc.y = y + Math.max(58, textHeight + 32);
+    doc.roundedRect(PAGE.left, y, PAGE.width, 58, 8).fill('#ffffff').stroke(COLORS.border);
+    doc.font('Helvetica-Bold').fontSize(9.5).fillColor(COLORS.ink).text(label, PAGE.left + 12, y + 11);
+    doc.font('Helvetica').fontSize(8.2).fillColor(COLORS.text).text(text, PAGE.left + 12, y + 28, { width: PAGE.width - 24, lineGap: 2 });
+    doc.y = y + 69;
   });
 
-  sectionTitle(doc, 'Important limitation', 'What this report can and cannot tell you.');
-  infoBox(doc, 'Remember', 'A clean scan does not prove that an application is completely secure. Pattern-based categories are not exhaustive, scanner results can contain false positives, and important findings should be reviewed in the context of the application.', COLORS.amberLight, '#92400e');
+  sectionTitle(doc, 'Limitations', 'Security scanners provide signals, not a guarantee of complete security.');
+  infoBox(doc, 'Important', 'A finding should be reviewed in the context of the application. Pattern-based checks can miss issues or report code that is safe in its actual context. Use this report to prioritize review and remediation, then scan again after fixes.', COLORS.amberLight, '#92400e');
 
   if (scan.assessmentStatus === 'incomplete') {
-    infoBox(doc, 'Assessment incomplete', scan.error || 'One or more core security checks did not complete. The available findings remain useful, but coverage is incomplete.', COLORS.redLight, '#991b1b');
+    infoBox(doc, 'Assessment was incomplete', scan.error || 'One or more core checks did not complete. The available findings remain useful, but the assessment should not be considered complete.', COLORS.redLight, '#991b1b');
   }
 }
 
 function sectionTitle(doc, title, subtitle) {
-  const subtitleHeight = doc.heightOfString(subtitle, { width: PAGE.width, font: 'Helvetica', fontSize: 8.7, lineGap: 1.8 });
-  ensureSpace(doc, 28 + subtitleHeight + 16);
-  doc.font('Helvetica-Bold').fontSize(15).fillColor(COLORS.ink).text(title);
-  doc.moveDown(0.2);
-  doc.font('Helvetica').fontSize(8.7).fillColor(COLORS.muted)
-    .text(subtitle, { width: PAGE.width, lineGap: 1.8 });
-  doc.moveDown(0.6);
+  ensureSpace(doc, 48);
+  doc.font('Helvetica-Bold').fontSize(13).fillColor(COLORS.ink).text(title, PAGE.left, doc.y, { width: PAGE.width });
+  doc.moveDown(0.18);
+  doc.font('Helvetica').fontSize(8.8).fillColor(COLORS.muted).text(subtitle, { width: PAGE.width, lineGap: 2 });
+  doc.moveDown(0.55);
 }
 
-function infoBox(doc, title, text, background, titleColor, compact = false) {
-  const size = compact ? 7.8 : 8.4;
-  const height = measureInfoBox(doc, text, compact) - 8;
+function infoBox(doc, title, body, background, titleColor) {
+  const height = Math.max(52, doc.heightOfString(body, { width: PAGE.width - 34, font: 'Helvetica', size: 8.2, lineGap: 2 }) + 32);
   ensureSpace(doc, height + 8);
   const y = doc.y;
-  doc.roundedRect(PAGE.left, y, PAGE.width, height, 8)
-    .fill(background)
-    .stroke(background === '#ffffff' ? COLORS.border : background);
-  doc.font('Helvetica-Bold').fontSize(compact ? 7.7 : 8.5).fillColor(titleColor)
-    .text(title, PAGE.left + 12, y + 9);
-  doc.font('Helvetica').fontSize(size).fillColor(COLORS.text)
-    .text(String(text), PAGE.left + 12, y + (compact ? 21 : 24), { width: PAGE.width - 24, lineGap: 1.6 });
+  doc.roundedRect(PAGE.left, y, PAGE.width, height, 8).fill(background);
+  doc.font('Helvetica-Bold').fontSize(8.8).fillColor(titleColor).text(title, PAGE.left + 14, y + 11);
+  doc.font('Helvetica').fontSize(8.2).fillColor(COLORS.text)
+    .text(body, PAGE.left + 14, y + 27, { width: PAGE.width - 28, lineGap: 2 });
   doc.y = y + height + 8;
 }
 
-function ensureSpace(doc, requiredHeight) {
-  if (doc.y + requiredHeight <= contentBottom(doc)) return;
-  doc.addPage();
-  drawPageHeader(doc, 'Security report — continued', 'The previous page was full, so this section continues here.');
-}
-
-function contentBottom(doc) {
-  return doc.page.height - PAGE.bottom - 8;
+function ensureSpace(doc, needed) {
+  const maxY = doc.page.height - PAGE.bottom;
+  if (doc.y + needed > maxY) {
+    doc.addPage();
+    drawPageHeader(doc, 'Security assessment report', 'Continued from the previous page.');
+  }
 }
 
 function severityCounts(findings) {
   return findings.reduce((acc, finding) => {
-    const severity = String(finding.severity || '').toLowerCase();
-    if (acc[severity] !== undefined) acc[severity] += 1;
+    const severity = String(finding.severity || 'medium').toLowerCase();
+    acc[severity] = (acc[severity] || 0) + 1;
     return acc;
   }, { critical: 0, high: 0, medium: 0, low: 0 });
 }
@@ -569,29 +454,14 @@ function successfulEngines(scan) {
   return Object.values(scan.engineStatus || {}).filter((status) => status === 'success').length;
 }
 
-function humanStatus(status) {
-  if (status === 'success') return 'Completed';
-  if (status === 'skipped') return 'Skipped';
-  if (status === 'failed') return 'Failed';
-  return 'Not run';
-}
-
 function riskMeaning(risk) {
   const value = String(risk || '').toLowerCase();
-  if (value.includes('critical')) return 'The scan found issues that may have a serious security impact and should be investigated immediately.';
-  if (value.includes('high')) return 'The scan found important security concerns that should be reviewed and addressed promptly.';
-  if (value.includes('medium')) return 'The scan found security concerns that should be reviewed and addressed. The score is a summary of the checks that completed.';
-  if (value.includes('low')) return 'The scan found fewer or lower-impact concerns, but the findings should still be reviewed.';
-  if (value.includes('good') || value.includes('secure')) return 'The completed checks found relatively few security concerns. Review the detailed findings and limitations before treating the result as final.';
-  return 'The score summarizes the security checks that completed. Review the detailed findings and limitations before making changes.';
-}
-
-function severityImpact(severity) {
-  const value = String(severity || '').toLowerCase();
-  if (value === 'critical') return 'A critical issue can have a severe impact if it is reachable and exploitable. It should be investigated immediately.';
-  if (value === 'high') return 'A high-severity issue can create significant security risk if the affected code is reachable. It should normally be addressed before release.';
-  if (value === 'medium') return 'A medium-severity issue represents a meaningful security concern and should be reviewed and fixed as part of normal maintenance.';
-  return 'A lower-severity issue may have limited impact on its own, but fixing it can improve the overall security posture.';
+  if (value.includes('critical')) return 'The scan found serious security issues that should be addressed before relying on the application in production.';
+  if (value.includes('high')) return 'The scan found important security issues that deserve prompt review and remediation.';
+  if (value.includes('medium')) return 'The scan found security issues that should be reviewed and fixed as part of normal hardening work.';
+  if (value.includes('low')) return 'The scan found a smaller number of lower-risk issues, but they should still be reviewed.';
+  if (value.includes('good')) return 'The completed checks did not identify major issues, but no automated scan can guarantee complete security.';
+  return 'This score summarizes the findings detected by the completed security checks.';
 }
 
 function riskColor(risk) {
@@ -600,7 +470,7 @@ function riskColor(risk) {
   if (value.includes('high')) return SEVERITY_COLORS.high;
   if (value.includes('medium')) return SEVERITY_COLORS.medium;
   if (value.includes('low')) return SEVERITY_COLORS.low;
-  return COLORS.accent;
+  return COLORS.accentDark;
 }
 
 function scoreBarColor(score) {
@@ -609,35 +479,28 @@ function scoreBarColor(score) {
   return COLORS.accent;
 }
 
-function formatLocation(file, line) {
-  if (!file) return '';
-  return line ? `${file}:${line}` : file;
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function formatDuration(ms) {
-  const value = Number(ms);
-  if (!Number.isFinite(value)) return 'N/A';
-  const seconds = Math.round(value / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  return `${minutes}m ${seconds % 60}s`;
+function plainImpact(severity) {
+  if (severity === 'critical') return 'This issue may create a serious path for attackers to compromise data, accounts, or application behavior.';
+  if (severity === 'high') return 'This issue can create a significant security risk if an attacker can reach the affected code or configuration.';
+  if (severity === 'medium') return 'This issue can weaken the application and may become more serious when combined with other weaknesses.';
+  return 'This issue is lower risk, but fixing it can improve the overall security posture.';
 }
 
 function formatDate(value) {
-  if (!value) return 'N/A';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleString();
+  if (!value) return 'Not available';
+  try { return new Date(value).toLocaleString(); } catch { return String(value); }
 }
 
-function humanize(value) {
-  return String(value || 'Security issue')
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+function formatDuration(ms) {
+  const seconds = Math.max(0, Math.round(Number(ms) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}m ${remainder}s`;
 }
 
 module.exports = { generateScanPdf };
