@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
+import { Download, AlertCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { useParams } from 'react-router-dom';
-import { Download, AlertCircle, Clock, ChevronDown, ChevronUp, Sparkles, Loader2 } from 'lucide-react';
 import client from '../api/client';
 import { LoadingState, ErrorState } from '../components/AsyncStates';
 import RadialGauge from '../components/RadialGauge';
@@ -47,28 +47,20 @@ export default function ScanResults() {
     <div className="mt-6 flex flex-wrap gap-3 text-xs text-muted dark:text-muted-dark"><EngineChip label="npm audit" status={scan.engineStatus?.npmAudit} /><EngineChip label="Secret scanner" status={scan.engineStatus?.secretScanner} /><EngineChip label="Semgrep" status={scan.engineStatus?.semgrep} /></div>
     <h2 className="mt-10 text-lg font-semibold text-ink dark:text-ink-dark">Findings by category</h2>
     {Object.keys(findingsByCategory).length === 0 && <p className="mt-4 text-sm text-muted dark:text-muted-dark">No findings detected in this scan. 🎉</p>}
-    <div className="mt-4 space-y-3">{Object.entries(findingsByCategory).map(([category, findings]) => <CategorySection key={category} category={category} findings={findings} allFindings={scan.findings || []} scanId={scan._id} />)}</div>
+    <div className="mt-4 space-y-3">{Object.entries(findingsByCategory).map(([category, findings]) => <CategorySection key={category} category={category} findings={findings} />)}</div>
   </div>;
 }
 
 function EngineChip({ label, status }) { const color = status === 'success' ? 'text-severity-low' : status === 'skipped' ? 'text-muted dark:text-muted-dark' : 'text-severity-high'; return <span className="rounded-full border border-border dark:border-border-dark px-3 py-1">{label}: <span className={color}>{status || 'unknown'}</span></span>; }
 
-function CategorySection({ category, findings, allFindings, scanId }) {
+function CategorySection({ category, findings }) {
   const [open, setOpen] = useState(true);
-  const [ai, setAi] = useState({});
   const isHeuristic = HEURISTIC_CATEGORIES.has(category);
-  async function explain(finding) {
-    const index = allFindings.indexOf(finding); if (index < 0 || ai[index]?.loading) return;
-    setAi((prev) => ({ ...prev, [index]: { loading: true } }));
-    try { const { data } = await client.post(`/scans/${scanId}/findings/${index}/ai`); setAi((prev) => ({ ...prev, [index]: { result: data.analysis } })); }
-    catch (err) { setAi((prev) => ({ ...prev, [index]: { error: err.response?.data?.error || 'AI analysis failed.' } })); }
-  }
   return <div className="rounded-xl border border-border dark:border-border-dark overflow-hidden">
     <button onClick={() => setOpen(!open)} className="flex w-full items-center justify-between bg-panel dark:bg-panel-dark px-4 py-3 text-left"><div className="flex items-center gap-2"><span className="font-medium text-ink dark:text-ink-dark">{CATEGORY_LABELS[category]}</span><span className="rounded-full bg-border dark:bg-border-dark px-2 py-0.5 text-xs text-muted dark:text-muted-dark">{findings.length}</span>{isHeuristic && <span className="flex items-center gap-1 text-xs text-muted dark:text-muted-dark"><AlertCircle className="h-3 w-3" /> heuristic, not exhaustive</span>}</div>{open ? <ChevronUp className="h-4 w-4 text-muted dark:text-muted-dark" /> : <ChevronDown className="h-4 w-4 text-muted dark:text-muted-dark" />}</button>
-    {open && <div className="divide-y divide-border dark:divide-border-dark">{findings.map((f, idx) => { const globalIndex = allFindings.indexOf(f); const state = ai[globalIndex]; return <div key={idx} className="px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2"><SeverityBadge severity={f.severity} /><span className="text-sm font-medium text-ink dark:text-ink-dark">{f.title}</span><button onClick={() => explain(f)} disabled={state?.loading} className="ml-auto inline-flex items-center gap-1 rounded-md border border-border dark:border-border-dark px-2 py-1 text-xs font-medium text-ink dark:text-ink-dark hover:bg-panel dark:hover:bg-panel-dark disabled:opacity-60">{state?.loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />} AI explain & fix</button></div>
+    {open && <div className="divide-y divide-border dark:divide-border-dark">{findings.map((f, idx) => <div key={idx} className="px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2"><SeverityBadge severity={f.severity} /><span className="text-sm font-medium text-ink dark:text-ink-dark">{f.title}</span></div>
       <p className="mt-1 text-sm text-muted dark:text-muted-dark">{f.description}</p>{f.file && <p className="mt-1 font-data text-xs text-muted dark:text-muted-dark">{f.file}{f.line ? `:${f.line}` : ''}</p>}{f.engines?.length > 1 && <p className="mt-1 text-xs text-muted dark:text-muted-dark">Detected by: {f.engines.join(', ')}</p>}
-      {state?.error && <p className="mt-3 text-xs text-severity-high">{state.error}</p>}{state?.result && <div className="mt-3 rounded-lg border border-border dark:border-border-dark bg-panel dark:bg-panel-dark p-4 text-sm"><p className="font-semibold text-ink dark:text-ink-dark">AI explanation</p><p className="mt-1 text-muted dark:text-muted-dark">{state.result.explanation}</p><p className="mt-3 font-semibold text-ink dark:text-ink-dark">Impact</p><p className="mt-1 text-muted dark:text-muted-dark">{state.result.impact}</p><p className="mt-3 font-semibold text-ink dark:text-ink-dark">Recommended fix</p><p className="mt-1 whitespace-pre-wrap text-muted dark:text-muted-dark">{state.result.remediation}</p>{state.result.codeExample && <><p className="mt-3 font-semibold text-ink dark:text-ink-dark">Example</p><pre className="mt-1 overflow-x-auto rounded-md bg-black/5 p-3 text-xs dark:bg-white/5"><code>{state.result.codeExample}</code></pre></>}<p className="mt-3 text-xs text-muted dark:text-muted-dark">AI confidence: {state.result.confidence}</p></div>}
-    </div>; })}</div>}
+    </div>)}</div>}
   </div>;
 }
