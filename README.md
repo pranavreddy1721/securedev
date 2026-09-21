@@ -5,8 +5,6 @@ Upload a `.zip` or connect a GitHub repo, and SecureDev orchestrates `npm audit`
 regex-based secret scanner, and Semgrep in parallel, then rolls the results up into a
 single weighted 0–100 security score with a downloadable PDF report.
 
-SecureDev also provides **optional AI-assisted vulnerability explanations and remediation guidance**. AI is invoked on demand for an individual finding so scans remain fully functional without an AI API key.
-
 **The core contribution is not the scanning itself** — it's the orchestration layer and
 the unified, severity-weighted scoring model on top of existing open-source tools.
 
@@ -14,7 +12,7 @@ the unified, severity-weighted scoring model on top of existing open-source tool
 
 ```
 securedev/
-├── backend/           Express API — auth, orchestration, scoring, PDF reports, AI assistance
+├── backend/           Express API — auth, orchestration, scoring, PDF reports
 │   └── src/
 │       ├── config/         DB connection + the scoring formula (single source of truth)
 │       ├── models/         Mongoose schemas: User, Project, Scan
@@ -25,7 +23,6 @@ securedev/
 │       ├── orchestrator/   Runs all engines in parallel via Promise.allSettled
 │       ├── scoring/        Implements the weighted scoring formula
 │       ├── reports/        PDF generation (pdfkit)
-│       ├── services/       AI-assisted security explanations and remediation
 │       └── utils/          crypto (token encryption), JWT helpers, temp dir, zip/repo handling
 ├── frontend/           React + Tailwind dashboard
 │   └── src/
@@ -59,8 +56,6 @@ Generate a valid `GITHUB_TOKEN_ENC_KEY` (32 random bytes, base64):
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-For optional AI-assisted explanations, set `GEMINI_API_KEY` and optionally `GEMINI_MODEL` in `.env`.
-
 ### Frontend
 
 ```bash
@@ -81,7 +76,6 @@ Visit `http://localhost:5173`.
 - All 3 named scan engines (npm audit, secret scanner, Semgrep) + orchestration via `Promise.allSettled`
 - Deterministic cross-engine finding normalization and unified scoring
 - Lightweight heuristics for insecure uploads, access control and sensitive-data exposure
-- Optional AI-assisted explanation, impact, remediation and safe code examples per finding
 - Dashboard, scan results, scan history (with score trend chart), PDF report, dark mode
 - GitHub Actions backend regression tests
 
@@ -95,7 +89,6 @@ Visit `http://localhost:5173`.
   deleted after each scan. Re-scanning a zip-sourced project requires re-uploading.
 - npm audit parsing targets npm v7+'s JSON shape; npm v6's older `advisories` format isn't handled.
 - Semgrep uses configurable public JavaScript/Node/Express rulesets. No custom MERN-specific rules are bundled yet.
-- AI assistance is optional and requires `GEMINI_API_KEY`; scan detection and scoring do not depend on it.
 - A scan is marked **incomplete** and does not receive a comprehensive score if a core engine
   fails. This prevents missing scanner output from being interpreted as a clean result.
 
