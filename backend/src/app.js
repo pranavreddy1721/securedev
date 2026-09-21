@@ -13,6 +13,11 @@ const { errorHandler } = require('./middleware/errorHandler');
 function createApp() {
   const app = express();
 
+  // Render sits behind a reverse proxy and forwards the original client IP in
+  // X-Forwarded-For. Trust the single proxy hop so express-rate-limit can
+  // safely and correctly identify clients without validation errors.
+  app.set('trust proxy', 1);
+
   // Security headers — Helmet is one of the exact things SecureDev checks
   // for in scanned projects, so it has to be present here too.
   app.use(helmet());
