@@ -5,6 +5,8 @@ Upload a `.zip` or connect a GitHub repo, and SecureDev orchestrates `npm audit`
 regex-based secret scanner, and Semgrep in parallel, then rolls the results up into a
 single weighted 0–100 security score with a downloadable PDF report.
 
+SecureDev also provides **optional AI-assisted vulnerability explanations and remediation guidance**. AI is invoked on demand for an individual finding so scans remain fully functional without an AI API key.
+
 **The core contribution is not the scanning itself** — it's the orchestration layer and
 the unified, severity-weighted scoring model on top of existing open-source tools.
 
@@ -12,7 +14,7 @@ the unified, severity-weighted scoring model on top of existing open-source tool
 
 ```
 securedev/
-├── backend/           Express API — auth, orchestration, scoring, PDF reports
+├── backend/           Express API — auth, orchestration, scoring, PDF reports, AI assistance
 │   └── src/
 │       ├── config/         DB connection + the scoring formula (single source of truth)
 │       ├── models/         Mongoose schemas: User, Project, Scan
@@ -23,6 +25,7 @@ securedev/
 │       ├── orchestrator/   Runs all engines in parallel via Promise.allSettled
 │       ├── scoring/        Implements the weighted scoring formula
 │       ├── reports/        PDF generation (pdfkit)
+│       ├── services/       AI-assisted security explanations and remediation
 │       └── utils/          crypto (token encryption), JWT helpers, temp dir, zip/repo handling
 ├── frontend/           React + Tailwind dashboard
 │   └── src/
@@ -46,7 +49,7 @@ securedev/
 ```bash
 cd backend
 cp .env.example .env
-# edit .env: set MONGODB_URI, JWT secrets, GITHUB_CLIENT_ID/SECRET, GITHUB_TOKEN_ENC_KEY
+# edit .env with your own credentials and secrets
 npm install
 npm run dev
 ```
@@ -55,6 +58,8 @@ Generate a valid `GITHUB_TOKEN_ENC_KEY` (32 random bytes, base64):
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
+
+For optional AI-assisted explanations, set `GEMINI_API_KEY` and optionally `GEMINI_MODEL` in `.env`.
 
 ### Frontend
 
@@ -69,15 +74,18 @@ Visit `http://localhost:5173`.
 
 ## What's built vs. stubbed (v1 status)
 
-**Fully implemented:**
+**Implemented:**
 - JWT auth (access + refresh, bcrypt, rate-limited)
 - GitHub OAuth (`public_repo` scope only, token encrypted at rest)
 - Zip upload (25MB limit, zip-slip protected) and GitHub repo intake
 - All 3 named scan engines (npm audit, secret scanner, Semgrep) + orchestration via `Promise.allSettled`
-- Scoring engine (hybrid severity-weighted, diminishing-returns formula — see `docs/ARCHITECTURE.md`)
+- Deterministic cross-engine finding normalization and unified scoring
+- Lightweight heuristics for insecure uploads, access control and sensitive-data exposure
+- Optional AI-assisted explanation, impact, remediation and safe code examples per finding
 - Dashboard, scan results, scan history (with score trend chart), PDF report, dark mode
+- GitHub Actions backend regression tests
 
-**Known v1 limitations (by design, not oversights):**
+**Known v1 limitations:**
 - **Insecure File Uploads, Broken Access Control, Sensitive Data Exposure** are covered by
   lightweight regex/pattern heuristics, not full static/dataflow analysis. Findings from
   these are tagged `heuristic: true` and labeled as such in the UI/PDF.
@@ -86,9 +94,8 @@ Visit `http://localhost:5173`.
 - No cloud storage — uploaded zips and cloned repos live in an ephemeral OS temp dir and are
   deleted after each scan. Re-scanning a zip-sourced project requires re-uploading.
 - npm audit parsing targets npm v7+'s JSON shape; npm v6's older `advisories` format isn't handled.
-- Semgrep uses the current public JavaScript/Node/Express rulesets (`p/javascript`, `p/nodejs`,
-  `p/expressjs`) and keeps the rule list configurable through `SEMGREP_RULESETS`. No custom
-  MERN-specific rules are bundled yet.
+- Semgrep uses configurable public JavaScript/Node/Express rulesets. No custom MERN-specific rules are bundled yet.
+- AI assistance is optional and requires `GEMINI_API_KEY`; scan detection and scoring do not depend on it.
 - A scan is marked **incomplete** and does not receive a comprehensive score if a core engine
   fails. This prevents missing scanner output from being interpreted as a clean result.
 
@@ -96,6 +103,5 @@ Visit `http://localhost:5173`.
 
 - **Frontend:** Cloudflare Pages — build command `npm run build`, output directory `dist`.
   Set `VITE_API_BASE_URL` to your Render backend URL in Pages' environment variables.
-- **Backend:** Render — build command should install Semgrep alongside npm deps:
-  `npm install && pip install semgrep`. Set all `.env.example` variables in Render's
-  environment settings. Set `CLIENT_ORIGIN` to your Cloudflare Pages domain so CORS allows it.
+- **Backend:** Render — build command `npm install && pip install semgrep --break-system-packages || pip3 install semgrep`.
+  Set all `.env.example` variables in Render's environment settings. Set `CLIENT_ORIGIN` to your Cloudflare Pages domain so CORS allows it.
