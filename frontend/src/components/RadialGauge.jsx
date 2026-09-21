@@ -12,51 +12,57 @@ function bandForScore(score) {
   return 'Critical Risk';
 }
 
-/**
- * SVG radial progress gauge for the security score — the dashboard's
- * visual centerpiece per the confirmed design direction.
- */
 export default function RadialGauge({ score = 0, size = 220, strokeWidth = 16, label }) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const clamped = Math.max(0, Math.min(100, score));
+  const clamped = Math.max(0, Math.min(100, Number(score) || 0));
   const offset = circumference - (clamped / 100) * circumference;
   const band = bandForScore(clamped);
   const color = BAND_COLORS[band];
 
   return (
     <div className="flex flex-col items-center" style={{ width: size }}>
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          strokeWidth={strokeWidth}
-          className="stroke-panel dark:stroke-panel-dark"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          style={{ transition: 'stroke-dashoffset 800ms ease-out' }}
-        />
-      </svg>
-      <div className="flex flex-col items-center" style={{ marginTop: -(size / 1.65) }}>
-        <span className="text-5xl font-extrabold tabular-nums" style={{ color }}>
-          {Math.round(clamped)}
-        </span>
-        <span className="text-sm text-muted dark:text-muted-dark">/ 100</span>
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          className="block -rotate-90"
+          aria-label={`Security score ${Math.round(clamped)} out of 100`}
+        >
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            strokeWidth={strokeWidth}
+            className="stroke-panel dark:stroke-panel-dark"
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: 'stroke-dashoffset 800ms ease-out' }}
+          />
+        </svg>
+
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-5xl font-extrabold leading-none tabular-nums" style={{ color }}>
+            {Math.round(clamped)}
+          </span>
+          <span className="mt-1 text-sm text-muted dark:text-muted-dark">/ 100</span>
+        </div>
       </div>
+
       <div className="mt-3 text-center">
         <span
-          className="inline-block rounded-full px-3 py-1 text-xs font-semibold text-white"
+          className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold text-white"
           style={{ backgroundColor: color }}
         >
           {band}
