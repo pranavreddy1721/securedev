@@ -1,10 +1,12 @@
 services:
   - type: web
     name: securedev-backend
-    runtime: node
+    runtime: docker
     rootDir: backend
-    buildCommand: npm install && pip install semgrep --break-system-packages || pip3 install semgrep
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./
+    plan: free
+    region: singapore
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
