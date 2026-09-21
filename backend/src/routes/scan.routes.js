@@ -10,7 +10,6 @@ router.use(requireAuth);
 router.post('/project/:projectId', scanLimiter, scanController.triggerScan);
 router.get('/project/:projectId/history', apiLimiter, scanController.listScanHistory);
 router.get('/:id', apiLimiter, scanController.getScan);
-router.post('/:id/findings/:findingIndex/ai', scanLimiter, scanController.analyzeFindingWithAi);
 router.get('/:id/report', apiLimiter, scanController.downloadReport);
 
 module.exports = router;
