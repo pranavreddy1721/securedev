@@ -9,8 +9,6 @@ const SEMGREP_SEVERITY_MAP = {
   INFO: 'low',
 };
 
-// Maps common Semgrep rule-id substrings to our 9-category taxonomy.
-// This is a best-effort classifier because public rulesets use their own IDs.
 function classifyRuleId(ruleId = '') {
   const id = ruleId.toLowerCase();
   if (id.includes('xss') || id.includes('dangerouslysetinnerhtml') || id.includes('innerhtml')) return 'xss';
@@ -24,13 +22,12 @@ function classifyRuleId(ruleId = '') {
 }
 
 /**
- * Runs Semgrep against the project using the Express ruleset by default.
- * Express rules already build on the JavaScript/Node ecosystem coverage, so
- * running three overlapping configs by default can duplicate findings.
- * Deployments can pin a different set through SEMGREP_RULESETS.
+ * Runs Semgrep against the project.
+ * The default rulesets intentionally match the project's documented JavaScript,
+ * Node.js and Express coverage. Deployments can override them with SEMGREP_RULESETS.
  */
 async function runSemgrepScan(projectDir) {
-  const rulesets = (process.env.SEMGREP_RULESETS || 'p/expressjs')
+  const rulesets = (process.env.SEMGREP_RULESETS || 'p/javascript,p/nodejs,p/expressjs')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
@@ -53,8 +50,6 @@ async function runSemgrepScan(projectDir) {
     });
     stdout = result.stdout;
   } catch (err) {
-    // Semgrep exits non-zero when findings exist; JSON on stdout is still a
-    // valid scan result. Treat it as a tool failure only when no JSON exists.
     if (err.stdout) stdout = err.stdout;
     else throw new Error(`Semgrep execution failed: ${err.message}`);
   }
