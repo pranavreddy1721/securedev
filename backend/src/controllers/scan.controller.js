@@ -84,8 +84,42 @@ async function analyzeFindingWithAi(req, res, next) {
     const analysis = await analyzeFinding(finding.toObject ? finding.toObject() : finding);
     return res.json({ analysis });
   } catch (err) {
-    if (err.code === 'AI_NOT_CONFIGURED') return res.status(503).json({ error: err.message, code: err.code });
-    if (err.response?.data) return res.status(502).json({ error: 'AI provider request failed' });
+    if (err.code === 'AI_NOT_CONFIGURED') {
+      return res.status(503).json({ error: err.message, code: err.code });
+    }
+
+    if (err.code === 'AI_PROVIDER_ERROR') {
+      const status = Number(err.statusCode);
+      // Do not expose provider internals or credentials to the browser. The
+      // service logs the provider message on Render for debugging.
+      if (status === 401 || status === 403) {
+        return res.status(502).json({
+          error: 'Gemini authentication or API access failed. Check the GEMINI_API_KEY and its API restrictions in Render.',
+          code: err.code,
+        });
+      }
+      if (status === 404) {
+        return res.status(502).json({
+          error: 'The configured Gemini model was not found or is not available to this API key. Check GEMINI_MODEL in Render.',
+          code: err.code,
+        });
+      }
+      if (status === 429) {
+        return res.status(502).json({
+          error: 'Gemini rate limit or quota was reached. Please try again shortly.',
+          code: err.code,
+        });
+      }
+      return res.status(502).json({
+        error: 'Gemini could not analyze this finding. Check the backend logs for the provider error.',
+        code: err.code,
+      });
+    }
+
+    if (err.code === 'AI_EMPTY_RESPONSE' || err.code === 'AI_INVALID_RESPONSE') {
+      return res.status(502).json({ error: err.message, code: err.code });
+    }
+
     return next(err);
   }
 }
