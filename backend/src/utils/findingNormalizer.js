@@ -14,7 +14,7 @@ function normalizeTitle(title = '') {
 }
 
 function findingKey(finding) {
-  const category = finding.category || '';
+  const category = String(finding.category || '').trim().toLowerCase();
   const file = normalizePath(finding.file || '');
   const title = normalizeTitle(finding.title || '');
   const line = finding.line == null || finding.line === '' ? '' : Number(finding.line);
@@ -38,7 +38,10 @@ function deduplicateFindings(findings = []) {
     if (!existing.owaspRef && finding.owaspRef) existing.owaspRef = finding.owaspRef;
     existing.heuristic = Boolean(existing.heuristic && finding.heuristic);
   }
-  return Array.from(merged.values());
+
+  // Stable ordering prevents identical scans from producing different result
+  // order merely because scanner completion order changed.
+  return Array.from(merged.values()).sort((a, b) => findingKey(a).localeCompare(findingKey(b)));
 }
 
 module.exports = { deduplicateFindings, findingKey };
