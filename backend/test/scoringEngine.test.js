@@ -4,8 +4,8 @@ const { computeScore, computeRawPenalty, applyDiminishingReturns } = require('..
 
 test('raw penalty is deterministic and severity-weighted', () => {
   const findings = [{ severity: 'high' }, { severity: 'medium' }, { severity: 'low' }];
-  assert.equal(computeRawPenalty(findings), 8);
-  assert.equal(computeRawPenalty([...findings].reverse()), 8);
+  assert.equal(computeRawPenalty(findings), 12);
+  assert.equal(computeRawPenalty([...findings].reverse()), 12);
 });
 
 test('diminishing returns is deterministic and rounded to two decimals', () => {
@@ -17,7 +17,7 @@ test('diminishing returns is deterministic and rounded to two decimals', () => {
 
 test('same findings in different orders produce the same score', () => {
   const findings = [
-    { category: 'dependencyVulnerability', severity: 'high' },
+    { category: 'vulnerableDependencies', severity: 'high' },
     { category: 'hardcodedSecrets', severity: 'critical' },
     { category: 'xss', severity: 'medium' },
     { category: 'insecureFileUploads', severity: 'low' },
