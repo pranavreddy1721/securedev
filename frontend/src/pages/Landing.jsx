@@ -10,7 +10,7 @@ const features = [
 const steps = [
   { n: '01', title: 'Bring your project', desc: 'Upload a ZIP or connect a GitHub repository.' },
   { n: '02', title: 'Run the scan', desc: 'SecureDev orchestrates the security engines automatically.' },
-  { n: '03', title: 'Fix what matters', desc: 'Review severity, evidence, score and AI-assisted remediation.' },
+  { n: '03', title: 'Fix what matters', desc: 'Review severity, evidence, score and practical remediation guidance.' },
 ];
 
 export default function Landing() {
