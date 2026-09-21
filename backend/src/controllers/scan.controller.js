@@ -87,12 +87,21 @@ async function downloadReport(req, res, next) {
   try {
     const scan = await Scan.findOne({ _id: req.params.id, owner: req.userId }).populate('project');
     if (!scan) return res.status(404).json({ error: 'Scan not found' });
-    if (scan.status !== 'completed') return res.status(400).json({ error: 'Report is only available for completed scans' });
+    if (scan.status !== 'completed') {
+      return res.status(400).json({ error: 'Report is only available for completed scans' });
+    }
+
+    // Build the complete PDF before sending headers. This makes PDF generation
+    // errors catchable by Express instead of producing a partially written PDF
+    // or a silent browser download failure.
+    const pdfBuffer = await generateScanPdf(scan, scan.project);
 
     res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', pdfBuffer.length);
     res.setHeader('Content-Disposition', `attachment; filename="securedev-report-${scan._id}.pdf"`);
-    generateScanPdf(scan, scan.project).pipe(res);
+    return res.status(200).end(pdfBuffer);
   } catch (err) {
+    console.error(`[report] PDF generation failed for scan ${req.params.id}:`, err);
     return next(err);
   }
 }
