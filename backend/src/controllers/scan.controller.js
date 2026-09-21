@@ -9,14 +9,8 @@ const { safeExtract } = require('../utils/zipExtractor');
 const { cloneRepo } = require('../utils/repoCloner');
 const { decrypt } = require('../utils/crypto');
 const { generateScanPdf } = require('../reports/pdfGenerator');
+const { analyzeFinding } = require('../services/aiSecurity.service');
 
-/**
- * Triggers a new scan for a project. Prepares a temp working directory
- * (extract zip, or clone repo) synchronously, then kicks off the actual
- * scan orchestration asynchronously so the request returns quickly with a
- * "queued/running" scan the client can poll — a full job queue (Bull/Redis)
- * is deliberately out of scope for v1 per the confirmed execution model.
- */
 async function triggerScan(req, res, next) {
   try {
     const project = await Project.findOne({ _id: req.params.projectId, owner: req.userId });
@@ -37,9 +31,7 @@ async function triggerScan(req, res, next) {
         await fs.unlink(uploadedFilePath).catch(() => {});
       } else if (project.source.type === 'github') {
         const user = await User.findById(req.userId).select('+github.accessTokenEncrypted');
-        if (!user?.github?.accessTokenEncrypted) {
-          throw new Error('GitHub is not connected for this account');
-        }
+        if (!user?.github?.accessTokenEncrypted) throw new Error('GitHub is not connected for this account');
         const accessToken = decrypt(user.github.accessTokenEncrypted);
         await cloneRepo({
           cloneUrl: project.source.repoUrl,
@@ -54,10 +46,9 @@ async function triggerScan(req, res, next) {
       scan.status = 'failed';
       scan.error = `Failed to prepare project files: ${prepErr.message}`;
       await scan.save();
-      return res.status(202).json({ scan }); // scan record exists but failed immediately
+      return res.status(202).json({ scan });
     }
 
-    // Fire and forget — client polls GET /api/scans/:id for status.
     runOrchestratedScan({ scanId: scan._id, projectDir: workDir }).catch((err) => {
       console.error(`[scan] orchestration error for scan ${scan._id}:`, err.message);
     });
@@ -74,6 +65,27 @@ async function getScan(req, res, next) {
     if (!scan) return res.status(404).json({ error: 'Scan not found' });
     return res.json({ scan });
   } catch (err) {
+    return next(err);
+  }
+}
+
+async function analyzeFindingWithAi(req, res, next) {
+  try {
+    const index = Number(req.params.findingIndex);
+    if (!Number.isInteger(index) || index < 0) return res.status(400).json({ error: 'Invalid finding index' });
+
+    const scan = await Scan.findOne({ _id: req.params.id, owner: req.userId });
+    if (!scan) return res.status(404).json({ error: 'Scan not found' });
+    if (scan.status !== 'completed') return res.status(400).json({ error: 'AI analysis is available only for completed scans' });
+
+    const finding = scan.findings[index];
+    if (!finding) return res.status(404).json({ error: 'Finding not found' });
+
+    const analysis = await analyzeFinding(finding.toObject ? finding.toObject() : finding);
+    return res.json({ analysis });
+  } catch (err) {
+    if (err.code === 'AI_NOT_CONFIGURED') return res.status(503).json({ error: err.message, code: err.code });
+    if (err.response?.data) return res.status(502).json({ error: 'AI provider request failed' });
     return next(err);
   }
 }
@@ -97,9 +109,7 @@ async function downloadReport(req, res, next) {
   try {
     const scan = await Scan.findOne({ _id: req.params.id, owner: req.userId }).populate('project');
     if (!scan) return res.status(404).json({ error: 'Scan not found' });
-    if (scan.status !== 'completed') {
-      return res.status(400).json({ error: 'Report is only available for completed scans' });
-    }
+    if (scan.status !== 'completed') return res.status(400).json({ error: 'Report is only available for completed scans' });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="securedev-report-${scan._id}.pdf"`);
@@ -109,4 +119,4 @@ async function downloadReport(req, res, next) {
   }
 }
 
-module.exports = { triggerScan, getScan, listScanHistory, downloadReport };
+module.exports = { triggerScan, getScan, analyzeFindingWithAi, listScanHistory, downloadReport };
