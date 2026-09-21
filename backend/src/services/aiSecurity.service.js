@@ -61,4 +61,4 @@ async function analyzeFinding(finding) {
   };
 }
 
-module.exports = { analyzeFinding };
+module.exports = { analyzeFinding, buildPrompt, parseJsonText };
