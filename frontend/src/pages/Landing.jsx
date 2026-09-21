@@ -81,7 +81,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="border-y border-slate-200 bg-white py-20 dark:border-slate-800 dark:bg-[#08171e]">
+      <section id="features" className="scroll-mt-24 border-y border-slate-200 bg-white py-20 dark:border-slate-800 dark:bg-[#08171e]">
         <div className="mx-auto max-w-7xl px-6 lg:px-10">
           <div className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-600">One workflow, several security layers</p>
@@ -99,7 +99,7 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="py-20">
+      <section id="how-it-works" className="scroll-mt-24 py-20">
         <div className="mx-auto max-w-7xl px-6 lg:px-10">
           <div className="grid gap-12 lg:grid-cols-[.75fr_1.25fr] lg:items-center">
             <div>
