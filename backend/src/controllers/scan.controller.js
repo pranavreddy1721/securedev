@@ -9,7 +9,6 @@ const { safeExtract } = require('../utils/zipExtractor');
 const { cloneRepo } = require('../utils/repoCloner');
 const { decrypt } = require('../utils/crypto');
 const { generateScanPdf } = require('../reports/pdfGenerator');
-const { analyzeFinding } = require('../services/aiSecurity.service');
 
 async function triggerScan(req, res, next) {
   try {
@@ -69,66 +68,6 @@ async function getScan(req, res, next) {
   }
 }
 
-async function analyzeFindingWithAi(req, res, next) {
-  try {
-    const index = Number(req.params.findingIndex);
-    if (!Number.isInteger(index) || index < 0) return res.status(400).json({ error: 'Invalid finding index' });
-
-    const scan = await Scan.findOne({ _id: req.params.id, owner: req.userId });
-    if (!scan) return res.status(404).json({ error: 'Scan not found' });
-    if (scan.status !== 'completed') return res.status(400).json({ error: 'AI analysis is available only for completed scans' });
-
-    const finding = scan.findings[index];
-    if (!finding) return res.status(404).json({ error: 'Finding not found' });
-
-    const analysis = await analyzeFinding(finding.toObject ? finding.toObject() : finding);
-    return res.json({ analysis });
-  } catch (err) {
-    if (err.code === 'AI_NOT_CONFIGURED') {
-      return res.status(503).json({ error: err.message, code: err.code });
-    }
-
-    if (err.code === 'AI_NETWORK_ERROR') {
-      return res.status(502).json({
-        error: 'SecureDev could not reach the Gemini API. Check Render network access and GEMINI_API_KEY, then try again.',
-        code: err.code,
-      });
-    }
-
-    if (err.code === 'AI_PROVIDER_ERROR') {
-      const status = Number(err.statusCode);
-      if (status === 400 || status === 401 || status === 403) {
-        return res.status(502).json({
-          error: 'Gemini rejected the request. Verify that GEMINI_API_KEY is a current Gemini authorization key with Gemini API access, and that GEMINI_MODEL is available to the key.',
-          code: err.code,
-        });
-      }
-      if (status === 404) {
-        return res.status(502).json({
-          error: 'The configured Gemini model or Interactions API endpoint was not found. Check GEMINI_MODEL in Render.',
-          code: err.code,
-        });
-      }
-      if (status === 429) {
-        return res.status(502).json({
-          error: 'Gemini rate limit or quota was reached. Please try again shortly.',
-          code: err.code,
-        });
-      }
-      return res.status(502).json({
-        error: 'Gemini could not analyze this finding. Check the backend logs for the provider error.',
-        code: err.code,
-      });
-    }
-
-    if (err.code === 'AI_EMPTY_RESPONSE' || err.code === 'AI_INVALID_RESPONSE') {
-      return res.status(502).json({ error: err.message, code: err.code });
-    }
-
-    return next(err);
-  }
-}
-
 async function listScanHistory(req, res, next) {
   try {
     const project = await Project.findOne({ _id: req.params.projectId, owner: req.userId });
@@ -158,4 +97,4 @@ async function downloadReport(req, res, next) {
   }
 }
 
-module.exports = { triggerScan, getScan, analyzeFindingWithAi, listScanHistory, downloadReport };
+module.exports = { triggerScan, getScan, listScanHistory, downloadReport };
