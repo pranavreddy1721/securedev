@@ -1,0 +1,55 @@
+name: SecureDev Backend CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Backend tests and Semgrep
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Install Semgrep
+        run: python -m pip install --disable-pip-version-check --no-input semgrep
+
+      - name: Verify toolchain
+        run: |
+          node --version
+          npm --version
+          python --version
+          semgrep --version
+
+      - name: Run backend test suite
+        run: npm test
+
+      - name: Run Semgrep integration test
+        run: node --test test/semgrep.integration.test.js
+        env:
+          SEMGREP_INTEGRATION: '1'
+          SEMGREP_TIMEOUT_MS: '120000'
