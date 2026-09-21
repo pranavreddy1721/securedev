@@ -15,6 +15,7 @@ export default function ScanResults() {
   const { id } = useParams();
   const [scan, setScan] = useState(null);
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
   const pollRef = useRef(null);
 
   useEffect(() => {
@@ -31,6 +32,35 @@ export default function ScanResults() {
     return () => { cancelled = true; clearInterval(pollRef.current); };
   }, [id]);
 
+  async function handleDownloadReport() {
+    if (!scan?._id || downloading) return;
+
+    setDownloading(true);
+    try {
+      // Use the authenticated Axios client instead of a normal <a href>.
+      // The report endpoint is protected by requireAuth, so a direct browser
+      // navigation does not include the Bearer token and returns 401.
+      const response = await client.get(`/scans/${scan._id}/report`, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `securedev-report-${scan._id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      console.error('Failed to download PDF report:', downloadError);
+      setError('Failed to download the PDF report. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   if (error) return <div className="mx-auto max-w-4xl px-6 py-10"><ErrorState message={error} /></div>;
   if (!scan) return <LoadingState label="Loading scan…" />;
   if (scan.status === 'queued' || scan.status === 'running') return <div className="mx-auto max-w-xl px-6 py-24 text-center"><Clock className="mx-auto h-8 w-8 animate-pulse text-accent-500" /><h2 className="mt-4 text-lg font-semibold text-ink dark:text-ink-dark">{scan.status === 'queued' ? 'Scan queued…' : 'Scan in progress…'}</h2><p className="mt-2 text-sm text-muted dark:text-muted-dark">Running npm audit, secret scanning, and Semgrep in parallel. This usually takes 30–90 seconds.</p></div>;
@@ -42,7 +72,7 @@ export default function ScanResults() {
   const isIncomplete = scan.assessmentStatus === 'incomplete';
 
   return <div className="mx-auto max-w-4xl px-6 py-10">
-    <div className="flex items-start justify-between"><div><h1 className="text-2xl font-bold text-ink dark:text-ink-dark">Scan results</h1><p className="mt-1 text-sm text-muted dark:text-muted-dark">Completed {scan.completedAt ? new Date(scan.completedAt).toLocaleString() : ''}</p></div><a href={`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'}/scans/${scan._id}/report`} className="flex items-center gap-1.5 rounded-lg border border-border dark:border-border-dark px-4 py-2 text-sm font-medium text-ink dark:text-ink-dark hover:bg-panel dark:hover:bg-panel-dark" target="_blank" rel="noreferrer"><Download className="h-4 w-4" /> Download PDF</a></div>
+    <div className="flex items-start justify-between"><div><h1 className="text-2xl font-bold text-ink dark:text-ink-dark">Scan results</h1><p className="mt-1 text-sm text-muted dark:text-muted-dark">Completed {scan.completedAt ? new Date(scan.completedAt).toLocaleString() : ''}</p></div><button type="button" onClick={handleDownloadReport} disabled={downloading} className="flex items-center gap-1.5 rounded-lg border border-border dark:border-border-dark px-4 py-2 text-sm font-medium text-ink dark:text-ink-dark hover:bg-panel dark:hover:bg-panel-dark disabled:cursor-not-allowed disabled:opacity-60"><Download className="h-4 w-4" /> {downloading ? 'Preparing PDF…' : 'Download PDF'}</button></div>
     {isIncomplete ? <div className="mt-8 rounded-xl border border-severity-high/30 bg-severity-high/5 p-5"><div className="flex items-start gap-3"><AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-severity-high" /><div><h2 className="font-semibold text-ink dark:text-ink-dark">Assessment incomplete</h2><p className="mt-1 text-sm text-muted dark:text-muted-dark">{scan.error || 'A core security engine did not complete. Findings are shown below, but a comprehensive security score was not generated.'}</p></div></div></div> : <div className="mt-8 flex flex-col items-center gap-8 rounded-xl border border-border dark:border-border-dark bg-panel dark:bg-panel-dark p-8 sm:flex-row sm:justify-around"><RadialGauge score={scan.finalScore} size={200} strokeWidth={14} /><div className="grid w-full max-w-xs gap-3">{Object.entries(scan.subScores || {}).map(([key, val]) => <div key={key}><div className="mb-1 flex justify-between text-xs text-muted dark:text-muted-dark"><span>{SUBSCORE_LABELS[key]}</span><span className="font-medium text-ink dark:text-ink-dark">{Math.round(val)}</span></div><div className="h-1.5 w-full rounded-full bg-border dark:bg-border-dark"><div className="h-1.5 rounded-full bg-accent-500" style={{ width: `${Math.min(100, val)}%` }} /></div></div>)}</div></div>}
     <div className="mt-6 flex flex-wrap gap-3 text-xs text-muted dark:text-muted-dark"><EngineChip label="npm audit" status={scan.engineStatus?.npmAudit} /><EngineChip label="Secret scanner" status={scan.engineStatus?.secretScanner} /><EngineChip label="Semgrep" status={scan.engineStatus?.semgrep} /></div>
     <h2 className="mt-10 text-lg font-semibold text-ink dark:text-ink-dark">Findings by category</h2>
