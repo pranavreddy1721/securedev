@@ -169,7 +169,7 @@ function drawPage1(pages, scan, project) {
     ['OK', `${successfulEngines(scan)}/3`, 'Security Engines', C.green, C.greenText],
   ]);
   sectionTitle(d, 'Executive Summary', heroY + 220, 'The most important result in plain language.');
-  drawCallout(d, heroY + 255, PAGE.width, 72, 'What the results mean', buildExecutiveSummary(scan), C.tealSoft, C.accentDark);
+  drawCallout(d, PAGE.left, heroY + 255, PAGE.width, 72, 'What the results mean', buildExecutiveSummary(scan), C.tealSoft, C.accentDark);
   drawMiniGuide(d, heroY + 344, scan);
 }
 
@@ -223,7 +223,7 @@ function drawPage2(pages, scan) {
   y = drawScoreTable(d, scan, y);
   sectionTitle(d, 'Why These Scores Matter', y + 22, 'The scores help show where attention is needed first.');
   drawCallout(d, y + 56, 247, 86, 'Dependency Security', 'This area has the highest weight at 30%. Known package vulnerabilities can introduce risk into otherwise secure application code.', C.blue, C.blueText);
-  drawCallout(d, y + 56, 247, 86, 'Application Security', 'This area reflects code-level risks such as unsafe input handling and sensitive response data.', C.tealSoft, C.accentDark);
+  drawCallout(d, PAGE.left + 265, y + 56, 246, 86, 'Application Security', 'This area reflects code-level risks such as unsafe input handling and sensitive response data.', C.tealSoft, C.accentDark);
   sectionTitle(d, 'Assessment Status', y + 163, 'Coverage and scanner status for this assessment.');
   drawStatusTable(d, scan, y + 196);
 }
@@ -363,11 +363,11 @@ function drawPage4(pages, scan) {
   drawPriorityBanner(d, y, 'HIGH PRIORITY FINDINGS', `${high.length}`, 'Should be addressed before release where the affected code is reachable.');
   y += 42;
   if (!high.length) {
-    drawCallout(d, y, PAGE.width, 90, 'No Critical or High findings', 'The completed scan did not report a Critical or High severity finding. Continue with the Medium and Low findings on the next page.', C.green, C.greenText);
+    drawCallout(d, PAGE.left, y, PAGE.width, 90, 'No Critical or High findings', 'The completed scan did not report a Critical or High severity finding. Continue with the Medium and Low findings on the next page.', C.green, C.greenText);
     return;
   }
   high.slice(0, 3).forEach((finding, index) => { y += drawHighFindingCard(d, finding, index + 1, y) + 10; });
-  if (high.length > 3) drawCallout(d, y, PAGE.width, 54, 'Additional high-priority findings', `${high.length - 3} additional Critical/High finding(s) are listed in the continuation section.`, C.red, C.redText);
+  if (high.length > 3) drawCallout(d, PAGE.left, y, PAGE.width, 54, 'Additional high-priority findings', `${high.length - 3} additional Critical/High finding(s) are listed in the continuation section.`, C.red, C.redText);
 }
 
 function drawHighFindingCard(d, finding, number, y) {
@@ -405,7 +405,7 @@ function drawPage5(pages, scan) {
   drawPriorityBanner(d, y, 'MEDIUM / LOWER PRIORITY FINDINGS', String(medium.length), 'Review as part of normal security maintenance.');
   y += 45;
   if (!medium.length) {
-    drawCallout(d, y, PAGE.width, 90, 'No additional findings', 'There are no Medium or Low findings to display for this assessment.', C.green, C.greenText);
+    drawCallout(d, PAGE.left, y, PAGE.width, 90, 'No additional findings', 'There are no Medium or Low findings to display for this assessment.', C.green, C.greenText);
     return;
   }
 
@@ -433,7 +433,7 @@ function drawPage5(pages, scan) {
     text(d, action, cx + 6, y + 9, cols[3] - 12, 'Helvetica', 6.7, C.text, 1.3);
     y += h;
   });
-  drawCallout(d, y + 12, PAGE.width, 58, 'Remediation principle', 'Fix the root cause, not only the scanner symptom. After changes are deployed, run another scan and confirm that the finding is no longer reported.', C.blue, C.blueText);
+  drawCallout(d, PAGE.left, y + 12, PAGE.width, 58, 'Remediation principle', 'Fix the root cause, not only the scanner symptom. After changes are deployed, run another scan and confirm that the finding is no longer reported.', C.blue, C.blueText);
 }
 
 function drawPage6(pages, scan) {
