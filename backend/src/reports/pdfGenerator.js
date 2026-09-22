@@ -139,16 +139,33 @@ function drawFooter(d, pageNo) {
 }
 
 function drawLogo(d, x, y) {
+  // SECUREDEV_VECTOR_LOGO_V1
   const box = 30;
+  d.save();
   d.roundedRect(x, y, box, box, 8).fill(C.accent);
-  d.font('Helvetica-Bold').fontSize(15).fillColor(C.white)
-    .text('OK', x + 8, y + 6, { width: 14, align: 'center', lineBreak: false });
+
+  // Shield mark rendered as PDF vector paths, so it is embedded in every PDF.
+  d.save();
+  d.lineWidth(1.8).lineCap('round').lineJoin('round').strokeColor(C.white);
+  d.path(`M ${x + 15} ${y + 6}
+          L ${x + 22} ${y + 9}
+          L ${x + 21} ${y + 17}
+          C ${x + 20} ${y + 22}, ${x + 17} ${y + 25}, ${x + 15} ${y + 26}
+          C ${x + 13} ${y + 25}, ${x + 10} ${y + 22}, ${x + 9} ${y + 17}
+          L ${x + 8} ${y + 9}
+          Z`).stroke();
+  d.moveTo(x + 11.5, y + 16).lineTo(x + 14.2, y + 18.7).lineTo(x + 19, y + 13.2).stroke();
+  d.restore();
+
   const textX = x + 39;
-  d.font('Helvetica-Bold').fontSize(16).fillColor(C.ink).text('Secure', textX, y + 5, { lineBreak: false });
+  d.font('Helvetica-Bold').fontSize(16).fillColor(C.ink)
+    .text('Secure', textX, y + 4, { lineBreak: false });
   const secureW = d.widthOfString('Secure');
-  d.font('Helvetica-Bold').fontSize(16).fillColor(C.accentDark).text('Dev', textX + secureW, y + 5, { lineBreak: false });
+  d.font('Helvetica-Bold').fontSize(16).fillColor(C.accentDark)
+    .text('Dev', textX + secureW, y + 4, { lineBreak: false });
   d.font('Helvetica').fontSize(6.5).fillColor(C.muted)
     .text('Application security made easier to understand', textX, y + 23, { width: 210, lineBreak: false });
+  d.restore();
 }
 
 function drawPage1(pages, scan, project) {
