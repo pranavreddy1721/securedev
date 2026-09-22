@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   test:
@@ -32,70 +32,6 @@ jobs:
 
       - name: Install backend dependencies
         run: npm ci --ignore-scripts
-
-      - name: Ensure SecureDev PDF logo is present
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path('src/reports/pdfGenerator.js')
-          source = path.read_text(encoding='utf-8')
-
-          if 'SECUREDEV_VECTOR_LOGO_V1' in source:
-              print('PDF logo already installed.')
-              raise SystemExit(0)
-
-          replacement = '''function drawLogo(d, x, y) {
-  // SECUREDEV_VECTOR_LOGO_V1
-  // Vector-only SecureDev logo: no external image dependency.
-  const box = 30;
-  d.save();
-  d.roundedRect(x, y, box, box, 8).fill(C.accent);
-
-  d.save();
-  d.lineWidth(1.8).lineCap('round').lineJoin('round').strokeColor(C.white);
-  d.path(`M ${x + 15} ${y + 6}
-          L ${x + 22} ${y + 9}
-          L ${x + 21} ${y + 17}
-          C ${x + 20} ${y + 22}, ${x + 17} ${y + 25}, ${x + 15} ${y + 26}
-          C ${x + 13} ${y + 25}, ${x + 10} ${y + 22}, ${x + 9} ${y + 17}
-          L ${x + 8} ${y + 9}
-          Z`).stroke();
-  d.moveTo(x + 11.5, y + 16).lineTo(x + 14.2, y + 18.7).lineTo(x + 19, y + 13.2).stroke();
-  d.restore();
-
-  const textX = x + 39;
-  d.font('Helvetica-Bold').fontSize(16).fillColor(C.ink)
-    .text('Secure', textX, y + 4, { lineBreak: false });
-  const secureW = d.widthOfString('Secure');
-  d.font('Helvetica-Bold').fontSize(16).fillColor(C.accentDark)
-    .text('Dev', textX + secureW, y + 4, { lineBreak: false });
-  d.font('Helvetica').fontSize(6.5).fillColor(C.muted)
-    .text('Application security made easier to understand', textX, y + 23, { width: 210, lineBreak: false });
-  d.restore();
-}'''
-
-          pattern = r"function drawLogo\(d, x, y\) \{.*?\n\}\n\nfunction drawPage1"
-          updated, count = re.subn(pattern, replacement + "\n\nfunction drawPage1", source, count=1, flags=re.S)
-          if count != 1:
-              raise SystemExit('Could not locate drawLogo; no changes made.')
-          path.write_text(updated, encoding='utf-8')
-          print('Installed vector SecureDev logo.')
-          PY
-
-      - name: Commit PDF logo change
-        run: |
-          if git diff --quiet -- src/reports/pdfGenerator.js; then
-            echo "No logo commit required."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/reports/pdfGenerator.js
-          git commit -m "Add SecureDev logo to PDF reports"
-          git push
 
       - name: Run backend tests
         run: npm test -- --test-concurrency=1
