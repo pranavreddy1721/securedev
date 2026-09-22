@@ -1,78 +1,104 @@
 const PDFDocument = require('pdfkit');
 
 const PAGE = {
-  left: 48,
-  right: 48,
-  top: 48,
-  contentBottom: 730,
-  footerLine: 758,
-  width: 499,
+  left: 42,
+  right: 42,
+  top: 42,
+  bottom: 48,
+  headerBottom: 84,
+  footerY: 790,
+  width: 511,
+  contentTop: 105,
+  contentBottom: 775,
 };
 
 const C = {
-  ink: '#0f172a', text: '#334155', muted: '#64748b', border: '#dbe3ec',
-  accent: '#10b981', accentDark: '#047857', soft: '#f8fafc', blue: '#eff6ff',
-  blueText: '#1d4ed8', green: '#ecfdf5', greenText: '#166534',
-  amber: '#fffbeb', amberText: '#92400e', white: '#ffffff',
+  ink: '#0b1b3a',
+  text: '#334155',
+  muted: '#64748b',
+  lightMuted: '#94a3b8',
+  border: '#d8e2ec',
+  white: '#ffffff',
+  header: '#f3fbf8',
+  accent: '#10b981',
+  accentDark: '#047857',
+  tealSoft: '#e8f8f2',
+  blue: '#eff6ff',
+  blueText: '#1d4ed8',
+  green: '#ecfdf5',
+  greenText: '#166534',
+  amber: '#fff7e6',
+  amberText: '#b45309',
+  red: '#fef2f2',
+  redText: '#b91c1c',
+  orange: '#fff7ed',
+  orangeText: '#c2410c',
+  slate: '#f8fafc',
+  slate2: '#eef3f7',
 };
 
 const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
 const SEV = {
   critical: ['#dc2626', '#fee2e2'],
-  high: ['#ea580c', '#ffedd5'],
-  medium: ['#d97706', '#fef3c7'],
-  low: ['#65a30d', '#ecfccb'],
+  high: ['#dc2626', '#fee2e2'],
+  medium: ['#ea580c', '#ffedd5'],
+  low: ['#2563eb', '#dbeafe'],
 };
 
 const CATEGORY_LABELS = {
-  vulnerableDependencies: 'Vulnerable Dependencies', hardcodedSecrets: 'Hardcoded Secrets',
-  injectionFlaws: 'Injection Flaws', xss: 'Cross-Site Scripting (XSS)',
-  brokenAuthentication: 'Broken Authentication', securityMisconfiguration: 'Security Misconfiguration',
-  insecureFileUploads: 'Insecure File Uploads', brokenAccessControl: 'Broken Access Control',
+  vulnerableDependencies: 'Vulnerable Dependencies',
+  hardcodedSecrets: 'Hardcoded Secrets',
+  injectionFlaws: 'Injection Flaws',
+  xss: 'Cross-Site Scripting (XSS)',
+  brokenAuthentication: 'Broken Authentication',
+  securityMisconfiguration: 'Security Misconfiguration',
+  insecureFileUploads: 'Insecure File Uploads',
+  brokenAccessControl: 'Broken Access Control',
   sensitiveDataExposure: 'Sensitive Data Exposure',
 };
 
 const CATEGORY_EXPLANATIONS = {
-  vulnerableDependencies: 'A package used by your project has a known security issue. Updating the package can reduce the risk.',
-  hardcodedSecrets: 'A password, API key, token, or similar secret appears to be stored in project files instead of outside the source code.',
-  injectionFlaws: 'User-controlled input may reach a sensitive operation without enough protection, allowing an attacker to influence what the application does.',
-  xss: 'Untrusted content may be displayed in a web page without enough protection, allowing malicious browser code to run for another user.',
-  brokenAuthentication: 'The application may have a weakness in the way it verifies users or manages authenticated sessions.',
-  securityMisconfiguration: 'A security-sensitive setting appears unsafe or incomplete. A wrong configuration can expose functionality that should be protected.',
-  insecureFileUploads: 'Uploaded files may not be checked or stored safely enough. A malicious file could cause unexpected behavior.',
-  brokenAccessControl: 'The application may not consistently check whether a user is allowed to access an action or resource.',
-  sensitiveDataExposure: 'An API response or other output may reveal information that should remain private, such as tokens, secrets, or password-related data.',
+  vulnerableDependencies: 'Third-party packages and known vulnerabilities.',
+  hardcodedSecrets: 'Credentials or secret-like values in source code.',
+  injectionFlaws: 'Common injection and unsafe-input patterns in application code.',
+  xss: 'Untrusted content that may be rendered unsafely in a browser.',
+  brokenAuthentication: 'Protection around user identity, sessions and access.',
+  securityMisconfiguration: 'Security-sensitive application configuration.',
+  insecureFileUploads: 'Uploaded content that may not be validated or stored safely.',
+  brokenAccessControl: 'Checks that control who can access actions or resources.',
+  sensitiveDataExposure: 'Sensitive fields that may be exposed through application responses.',
 };
 
 const CATEGORY_ACTIONS = {
-  vulnerableDependencies: 'Update the affected package to a patched version, review the change, and run the scan again.',
-  hardcodedSecrets: 'Remove the secret from source code, rotate the exposed credential, and store future secrets in environment variables or a secret manager.',
-  injectionFlaws: 'Validate and constrain user input, use safe APIs or parameterized operations, and add a regression test for the affected path.',
-  xss: 'Encode untrusted output for its destination, avoid unsafe HTML insertion, and validate input where appropriate.',
-  brokenAuthentication: 'Review login, session, token, and authorization checks around the reported code and add tests for unauthorized access.',
-  securityMisconfiguration: 'Review the reported configuration, apply a secure default, and verify the behavior in a production-like environment.',
-  insecureFileUploads: 'Restrict file types and sizes, validate uploaded content, store uploads safely, and prevent uploaded files from being executed.',
-  brokenAccessControl: 'Add an explicit authorization check before the sensitive operation and test both allowed and denied users.',
-  sensitiveDataExposure: 'Return only the fields the client needs and remove secrets, tokens, password hashes, or other private values from responses.',
+  vulnerableDependencies: 'Update the affected package to a patched version and run the scan again.',
+  hardcodedSecrets: 'Remove the secret, rotate the credential, and store future secrets in environment variables or a secret manager.',
+  injectionFlaws: 'Use safe APIs, validate input, constrain accepted values, and add a regression test.',
+  xss: 'Encode untrusted output, avoid unsafe HTML insertion, and validate input where appropriate.',
+  brokenAuthentication: 'Review authentication and session checks and add tests for unauthorized access.',
+  securityMisconfiguration: 'Apply a secure configuration and verify the behavior in a production-like environment.',
+  insecureFileUploads: 'Restrict file types and sizes, validate content, store uploads safely, and prevent execution.',
+  brokenAccessControl: 'Add an explicit authorization check before the sensitive operation and test denied access.',
+  sensitiveDataExposure: 'Return only required fields and remove secrets, tokens, password hashes and other private values.',
 };
 
-const SUBSCORES = {
-  dependency: ['Dependency Security', 'Third-party packages and known vulnerabilities.', 30],
-  authentication: ['Authentication', 'Protection around user identity and access.', 20],
-  secrets: ['Secrets Detection', 'Credentials or secret-like values in source code.', 20],
-  owaspCompliance: ['Application Security', 'Common application security risks found in code.', 20],
-  configuration: ['Configuration', 'Security-sensitive application configuration.', 10],
-};
+const SUBSCORES = [
+  ['dependency', 'Dependency Security', 'Third-party packages and known vulnerabilities.', 30],
+  ['authentication', 'Authentication', 'Protection around user identity and access.', 20],
+  ['secrets', 'Secrets Detection', 'Credentials or secret-like values in source code.', 20],
+  ['owaspCompliance', 'Application Security', 'Common application security risks found in code.', 20],
+  ['configuration', 'Configuration', 'Security-sensitive application configuration.', 10],
+];
 
 async function generateScanPdf(scan, project) {
   const doc = new PDFDocument({
     size: 'A4',
-    margins: { top: PAGE.top, bottom: 40, left: PAGE.left, right: PAGE.right },
+    margins: { top: 0, bottom: 0, left: 0, right: 0 },
     info: {
-      Title: `SecureDev Security Report - ${project?.name || 'Project'}`,
+      Title: `SecureDev Security Assessment Report - ${project?.name || 'Project'}`,
       Author: 'SecureDev',
       Subject: 'Application security assessment',
     },
+    autoFirstPage: false,
   });
 
   const chunks = [];
@@ -82,261 +108,506 @@ async function generateScanPdf(scan, project) {
     doc.on('error', reject);
   });
 
-  const p = createPages(doc);
-  drawCover(p, scan, project);
-  p.next('Security overview', 'Score breakdown and security checks used for this assessment.');
-  drawOverview(p, scan);
-  p.next('Findings and remediation', 'Plain-language explanations of detected issues and practical next steps.');
-  drawFindings(p, scan);
-  p.next('How SecureDev produced this report', 'A transparent summary of the scanning process, scoring model, and limitations.');
-  drawMethodology(p, scan);
-  p.finish();
+  const pages = createPages(doc, scan, project);
+  drawPage1(pages, scan, project);
+  drawPage2(pages, scan);
+  drawPage3(pages, scan);
+  drawPage4(pages, scan);
+  drawPage5(pages, scan);
+  drawPage6(pages, scan);
+
   doc.end();
   return pdf;
 }
 
 function createPages(doc) {
-  let page = 1;
-  let y = PAGE.top;
-  let started = false;
+  let pageNo = 0;
 
-  function footer() {
-    doc.save();
-    doc.strokeColor(C.border).lineWidth(0.6).moveTo(PAGE.left, PAGE.footerLine).lineTo(doc.page.width - PAGE.right, PAGE.footerLine).stroke();
-    doc.font('Helvetica').fontSize(7.5).fillColor('#94a3b8').text(`SecureDev Security Report  |  Page ${page}`, PAGE.left, PAGE.footerLine + 8, { width: PAGE.width, align: 'center', lineBreak: false });
-    doc.restore();
-  }
-
-  function brand() {
-    doc.roundedRect(PAGE.left, PAGE.top, 38, 38, 9).fill(C.accent);
-    doc.fillColor(C.white).font('Helvetica-Bold').fontSize(21).text('✓', PAGE.left + 10, PAGE.top + 7, { lineBreak: false });
-    doc.fillColor(C.ink).font('Helvetica-Bold').fontSize(21).text('Secure', PAGE.left + 50, PAGE.top + 3, { lineBreak: false });
-    doc.fillColor(C.accentDark).text('Dev', PAGE.left + 113, PAGE.top + 3, { lineBreak: false });
-    doc.font('Helvetica').fontSize(8.5).fillColor(C.muted).text('Application security made easier to understand', PAGE.left + 50, PAGE.top + 27, { lineBreak: false });
-  }
-
-  function header(title, subtitle) {
-    brand();
-    y = PAGE.top + 58;
-    y = text(doc, title, PAGE.left, y, PAGE.width, 'Helvetica-Bold', 20, C.ink, 0) + 4;
-    y = text(doc, subtitle, PAGE.left, y, PAGE.width, 'Helvetica', 9, C.muted, 2) + 12;
-  }
-
-  function next(title, subtitle) {
-    if (started) footer();
+  function startPage(title, subtitle, options = {}) {
     doc.addPage();
-    page += 1;
-    started = true;
-    header(title, subtitle);
+    pageNo += 1;
+    drawHeader(doc, pageNo, title, subtitle, options);
+    drawFooter(doc, pageNo);
+    return { doc, x: PAGE.left, y: options.contentY || PAGE.contentTop, width: PAGE.width, pageNo };
   }
 
-  function first() {
-    started = true;
-    brand();
-  }
-
-  function ensure(height) {
-    if (y + height <= PAGE.contentBottom) return;
-    footer();
-    doc.addPage();
-    page += 1;
-    header('Security report continued', 'The report continues below; each finding is kept together on one page.');
-  }
-
-  function finish() { if (started) footer(); }
-
-  first();
-  return { doc, get y() { return y; }, set y(v) { y = v; }, ensure, next, finish };
+  return { startPage, doc, get pageNo() { return pageNo; } };
 }
 
-function drawCover(p, scan, project) {
-  const d = p.doc;
-  p.y = PAGE.top + 72;
-  p.y = text(d, 'Security Assessment Report', PAGE.left, p.y, PAGE.width, 'Helvetica-Bold', 27, C.ink, 0) + 10;
-  p.y = text(d, `Project: ${project?.name || 'Unknown project'}`, PAGE.left, p.y, PAGE.width, 'Helvetica', 11, C.muted, 0) + 3;
-  p.y = text(d, `Scan completed: ${formatDate(scan.completedAt)}`, PAGE.left, p.y, PAGE.width, 'Helvetica', 10, C.muted, 0) + 2;
-  if (scan.durationMs) p.y = text(d, `Scan duration: ${formatDuration(scan.durationMs)}`, PAGE.left, p.y, PAGE.width, 'Helvetica', 10, C.muted, 0) + 10;
+function drawHeader(d, pageNo, title, subtitle, options = {}) {
+  d.save();
+  d.rect(0, 0, d.page.width, 86).fill(C.white);
+  d.rect(0, 0, d.page.width, 86).fill(C.header);
+  d.rect(0, 85, d.page.width, 1).fill(C.border);
 
-  scoreHero(p, scan);
-  p.y += 12;
-  section(p, 'Executive summary', 'A quick explanation for technical and non-technical readers.');
-  infoBox(p, 'What the score means', riskMeaning(scan.riskBand), C.soft, C.text);
-  p.y += 8;
-  section(p, 'At a glance', 'The most important results from this scan.');
+  drawLogo(d, 28, 18);
+
+  d.font('Helvetica-Bold').fontSize(8).fillColor(C.ink)
+    .text('SECURITY ASSESSMENT REPORT', 365, 20, { width: 185, align: 'right', lineBreak: false });
+  d.font('Helvetica').fontSize(7).fillColor(C.muted)
+    .text(`Generated ${formatDate(new Date())}`, 365, 34, { width: 185, align: 'right', lineBreak: false });
+
+  if (title) {
+    const icon = options.icon || '▦';
+    d.font('Helvetica-Bold').fontSize(8).fillColor(C.accentDark)
+      .text(icon, PAGE.left, 96, { lineBreak: false });
+    d.font('Helvetica-Bold').fontSize(18).fillColor(C.ink)
+      .text(title, PAGE.left + 17, 91, { width: 350, lineBreak: false });
+    if (subtitle) {
+      d.font('Helvetica').fontSize(8).fillColor(C.muted)
+        .text(subtitle, PAGE.left + 17, 115, { width: 470, lineBreak: false });
+    }
+  }
+  d.restore();
+}
+
+function drawFooter(d, pageNo) {
+  d.save();
+  d.rect(PAGE.left, PAGE.footerY, PAGE.width, 0.8).fill(C.border);
+  d.font('Helvetica').fontSize(6.8).fillColor(C.muted)
+    .text('SecureDev | Security Assessment Report', PAGE.left, PAGE.footerY + 9, { width: 250, lineBreak: false });
+  d.text(`Page ${pageNo} of 6`, PAGE.left + 390, PAGE.footerY + 9, { width: 121, align: 'right', lineBreak: false });
+  d.restore();
+}
+
+function drawLogo(d, x, y) {
+  const box = 30;
+  d.roundedRect(x, y, box, box, 8).fill(C.accent);
+  d.font('Helvetica-Bold').fontSize(15).fillColor(C.white)
+    .text('✓', x + 8, y + 6, { width: 14, align: 'center', lineBreak: false });
+
+  const textX = x + 39;
+  d.font('Helvetica-Bold').fontSize(16).fillColor(C.ink)
+    .text('Secure', textX, y + 5, { lineBreak: false });
+  const secureW = d.widthOfString('Secure');
+  d.font('Helvetica-Bold').fontSize(16).fillColor(C.accentDark)
+    .text('Dev', textX + secureW, y + 5, { lineBreak: false });
+
+  d.font('Helvetica').fontSize(6.5).fillColor(C.muted)
+    .text('Application security made easier to understand', textX, y + 23, { width: 210, lineBreak: false });
+}
+
+function drawPage1(pages, scan, project) {
+  const p = pages.startPage('Security Assessment Report', 'A clear summary of your application security posture.', { icon: '▣' });
+  const d = p.doc;
+  const y = 145;
+
+  text(d, `Project: ${project?.name || 'Unknown project'}`, PAGE.left, y, 300, 'Helvetica-Bold', 9.5, C.ink, 0);
+  text(d, `Scan completed: ${formatDate(scan.completedAt)}`, PAGE.left, y + 16, 300, 'Helvetica', 8, C.muted, 0);
+  if (scan.durationMs) text(d, `Scan duration: ${formatDuration(scan.durationMs)}`, PAGE.left, y + 30, 300, 'Helvetica', 8, C.muted, 0);
+
+  const heroY = 190;
+  drawScoreHero(d, scan, heroY);
+
   const findings = scan.findings || [];
   const counts = severityCounts(findings);
-  metrics(p, [
-    ['Issues found', String(findings.length), 'Total findings detected'],
-    ['Critical / High', String(counts.critical + counts.high), 'Needs prompt attention'],
-    ['Checks completed', `${successfulEngines(scan)}/3`, 'Security engines finished'],
-    ['Assessment', scan.assessmentStatus === 'complete' ? 'Complete' : 'Incomplete', 'Coverage status'],
+  drawMetricRow(d, heroY + 133, [
+    ['!', String(findings.length), 'Total Issues', C.red, C.redText],
+    ['!', String(counts.critical + counts.high), 'Critical / High', C.red, C.redText],
+    ['✓', `${successfulEngines(scan)}/3`, 'Security Engines', C.green, C.greenText],
   ]);
-  p.y += 2;
-  infoBox(p, scan.assessmentStatus === 'complete' ? 'How to read this report' : 'Important notice',
-    scan.assessmentStatus === 'complete'
-      ? 'Start with Critical and High findings. Each issue explains what it means, why it matters, where it was found, and what to do next.'
-      : 'This assessment is incomplete. The available findings are useful, but the score should not be treated as a complete assessment.',
-    scan.assessmentStatus === 'complete' ? C.blue : C.amber,
-    scan.assessmentStatus === 'complete' ? C.blueText : C.amberText);
+
+  sectionTitle(d, 'Executive Summary', heroY + 220, 'The most important result in plain language.');
+  drawCallout(d, heroY + 255, PAGE.width, 72, 'What the results mean', buildExecutiveSummary(scan), C.tealSoft, C.accentDark);
+  drawMiniGuide(d, heroY + 344, scan);
 }
 
-function scoreHero(p, scan) {
-  const d = p.doc, h = 112;
-  p.ensure(h);
-  const y = p.y;
+function drawScoreHero(d, scan, y) {
   const score = Number.isFinite(Number(scan.finalScore)) ? Number(scan.finalScore).toFixed(1) : 'N/A';
   const risk = scan.riskBand || 'Risk level unavailable';
-  d.roundedRect(PAGE.left, y, PAGE.width, h, 12).fill('#f1f5f9');
-  d.roundedRect(PAGE.left, y, 7, h, 3).fill(riskColor(risk));
-  d.font('Helvetica-Bold').fontSize(9).fillColor(C.muted).text('OVERALL SECURITY SCORE', PAGE.left + 22, y + 16, { lineBreak: false });
-  d.font('Helvetica-Bold').fontSize(37).fillColor(C.ink).text(score, PAGE.left + 22, y + 36, { lineBreak: false });
-  d.font('Helvetica').fontSize(11).fillColor(C.muted).text('/ 100', PAGE.left + 145, y + 53, { lineBreak: false });
-  d.font('Helvetica-Bold').fontSize(17).fillColor(riskColor(risk)).text(risk, PAGE.left + 205, y + 21, { width: 270, lineBreak: false });
-  d.font('Helvetica-Bold').fontSize(9).fillColor(C.text).text('Risk level', PAGE.left + 205, y + 47, { lineBreak: false });
-  text(d, riskMeaning(risk), PAGE.left + 205, y + 63, 270, 'Helvetica', 8.4, C.text, 2);
-  p.y = y + h;
+  d.roundedRect(PAGE.left, y, PAGE.width, 116, 10).fill('#eef4f8').stroke(C.border);
+
+  d.font('Helvetica-Bold').fontSize(8).fillColor(C.muted)
+    .text('OVERALL SECURITY SCORE', PAGE.left + 20, y + 14, { lineBreak: false });
+  d.font('Helvetica-Bold').fontSize(38).fillColor(C.ink)
+    .text(score, PAGE.left + 20, y + 35, { lineBreak: false });
+  const scoreW = d.widthOfString(score);
+  d.font('Helvetica').fontSize(10).fillColor(C.muted)
+    .text('/ 100', PAGE.left + 28 + scoreW, y + 57, { lineBreak: false });
+
+  d.roundedRect(PAGE.left + 205, y + 18, 112, 24, 7).fill(riskFill(risk));
+  d.font('Helvetica-Bold').fontSize(9).fillColor(riskText(risk))
+    .text(risk.toUpperCase(), PAGE.left + 205, y + 26, { width: 112, align: 'center', lineBreak: false });
+  d.font('Helvetica-Bold').fontSize(12).fillColor(C.ink)
+    .text('Security posture', PAGE.left + 205, y + 53, { lineBreak: false });
+  text(d, riskMeaning(risk), PAGE.left + 205, y + 71, 285, 'Helvetica', 7.8, C.text, 2);
 }
 
-function drawOverview(p, scan) {
-  section(p, 'How the score is calculated', 'The final score is a weighted summary of five security areas. A lower sub-score means more issues were detected in that area.');
-  const sub = scan.subScores || {};
-  for (const [key, [label, explanation, weight]] of Object.entries(SUBSCORES)) {
-    p.ensure(68);
-    const y = p.y, d = p.doc, score = Number.isFinite(Number(sub[key])) ? Math.round(Number(sub[key])) : null;
-    d.roundedRect(PAGE.left, y, PAGE.width, 68, 9).fill(C.white).stroke(C.border);
-    text(d, label, PAGE.left + 12, y + 9, 330, 'Helvetica-Bold', 10.5, C.ink, 0);
-    text(d, `${weight}% weight`, PAGE.left + 392, y + 9, 88, 'Helvetica-Bold', 7.5, C.muted, 0, 'right');
-    text(d, explanation, PAGE.left + 12, y + 27, 350, 'Helvetica', 7.8, C.muted, 1.5);
-    text(d, score === null ? 'N/A' : `${score}/100`, PAGE.left + 420, y + 27, 60, 'Helvetica-Bold', 9.5, C.text, 0, 'right');
-    d.roundedRect(PAGE.left + 12, y + 50, PAGE.width - 100, 6, 3).fill('#e2e8f0');
-    if (score !== null) d.roundedRect(PAGE.left + 12, y + 50, (PAGE.width - 100) * clamp(score, 0, 100) / 100, 6, 3).fill(scoreBarColor(score));
-    p.y = y + 77;
-  }
-  infoBox(p, 'How to interpret this section', 'The percentage beside each area is its contribution to the final score. Dependency Security has a 30% weight, so dependency findings can have a substantial effect on the overall result.', C.blue, C.blueText);
-  section(p, 'Security checks performed', 'These checks work together to give you one report instead of separate scanner outputs.');
-  const engines = [
-    ['npm audit', scan.engineStatus?.npmAudit, 'Checks third-party packages for publicly known vulnerabilities.'],
-    ['Secret scanner', scan.engineStatus?.secretScanner, 'Looks for credentials and other secret-like values in project files.'],
-    ['Semgrep', scan.engineStatus?.semgrep, 'Checks source code for security-risk patterns.'],
-  ];
-  for (const [name, status, explanation] of engines) {
-    p.ensure(58);
-    const y = p.y, d = p.doc;
-    const ok = status === 'success';
-    d.roundedRect(PAGE.left, y, PAGE.width, 58, 8).fill(C.white).stroke(C.border);
-    text(d, name, PAGE.left + 12, y + 9, 250, 'Helvetica-Bold', 10, C.ink, 0);
-    text(d, ok ? 'Completed' : status === 'skipped' ? 'Skipped' : 'Failed', PAGE.left + 390, y + 9, 90, 'Helvetica-Bold', 8, ok ? C.greenText : status === 'skipped' ? C.muted : '#b91c1c', 0, 'right');
-    text(d, explanation, PAGE.left + 12, y + 28, PAGE.width - 24, 'Helvetica', 7.8, C.muted, 1.5);
-    p.y = y + 66;
-  }
-}
-
-function drawFindings(p, scan) {
-  const findings = [...(scan.findings || [])].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 99) - (SEVERITY_ORDER[b.severity] ?? 99));
-  if (!findings.length) {
-    infoBox(p, 'No findings detected', 'The completed scanners did not report an issue. This does not guarantee that the application is completely secure.', C.green, C.greenText);
-    return;
-  }
-  const grouped = {};
-  findings.forEach(f => { const k = f.category || 'other'; (grouped[k] ||= []).push(f); });
-  for (const [category, list] of Object.entries(grouped)) {
-    const label = CATEGORY_LABELS[category] || humanize(category);
-    const explanation = CATEGORY_EXPLANATIONS[category] || 'A security-related issue was detected in this area.';
-    p.ensure(55);
-    p.y = text(p.doc, label, PAGE.left, p.y, PAGE.width, 'Helvetica-Bold', 14, C.ink, 0) + 3;
-    p.y = text(p.doc, explanation, PAGE.left, p.y, PAGE.width, 'Helvetica', 8.5, C.muted, 2) + 9;
-    for (const finding of list) { findingCard(p, finding, category); p.y += 9; }
-  }
-}
-
-function findingCard(p, finding, category) {
-  const d = p.doc;
-  const severity = String(finding.severity || 'medium').toLowerCase();
-  const [sevColor, sevBg] = SEV[severity] || SEV.medium;
-  const title = finding.title || 'Security finding';
-  const description = finding.description || 'No detailed description was provided by the scanner.';
-  const file = finding.file ? `${finding.file}${finding.line ? ` • Line ${finding.line}` : ''}` : 'Location not provided';
-  const why = whyItMatters(severity);
-  const action = finding.remediation || CATEGORY_ACTIONS[category] || 'Review the affected code, apply the recommended security control, and run the scan again.';
-  const w = PAGE.width - 28;
-  const dh = height(d, description, w, 8.3, 2), fh = height(d, file, w, 7.6, 1.5), wh = height(d, why, w, 8.1, 2), ah = height(d, action, w, 8.1, 2);
-  const h = 66 + dh + fh + wh + ah + 38;
-  p.ensure(h);
-  const y = p.y;
-  d.roundedRect(PAGE.left, y, PAGE.width, h, 10).fill(C.white).stroke(C.border);
-  d.roundedRect(PAGE.left, y, 6, h, 3).fill(sevColor);
-  d.roundedRect(PAGE.left + 14, y + 12, 54, 18, 8).fill(sevBg);
-  text(d, severity.toUpperCase(), PAGE.left + 14, y + 17, 54, 'Helvetica-Bold', 7, sevColor, 0, 'center');
-  text(d, title, PAGE.left + 78, y + 13, PAGE.width - 92, 'Helvetica-Bold', 10.5, C.ink, 1.5);
-  let cy = y + 45;
-  cy = field(d, 'WHAT WAS FOUND', description, cy, w, 8.3);
-  cy = field(d, 'WHERE', file, cy + 7, w, 7.6);
-  cy = field(d, 'WHY IT MATTERS', why, cy + 7, w, 8.1);
-  field(d, 'WHAT TO DO', action, cy + 7, w, 8.1);
-  p.y = y + h;
-}
-
-function drawMethodology(p, scan) {
-  section(p, 'What SecureDev scanned', 'SecureDev combines several focused checks into one assessment.');
-  const steps = [
-    ['1. Dependencies', 'npm audit checks project packages against known vulnerability advisories.'],
-    ['2. Secrets', 'The secret scanner searches project files for credential-like values that should not be committed.'],
-    ['3. Source code', 'Semgrep applies security rules to source code to identify potentially unsafe patterns.'],
-    ['4. Heuristics', 'Additional lightweight checks look for common application-security risks such as unsafe uploads, access-control gaps, and sensitive response fields.'],
-    ['5. Normalization', 'Duplicate detections are combined so the same underlying issue is not counted repeatedly.'],
-    ['6. Scoring', 'Five weighted security areas are combined into the final score.'],
-  ];
-  for (const [title, body] of steps) {
-    const h = 25 + height(p.doc, body, PAGE.width - 28, 8.5, 2);
-    p.ensure(h + 8);
-    const y = p.y;
-    p.doc.roundedRect(PAGE.left, y, PAGE.width, h, 8).fill(C.white).stroke(C.border);
-    text(p.doc, title, PAGE.left + 14, y + 8, PAGE.width - 28, 'Helvetica-Bold', 9.5, C.ink, 0);
-    text(p.doc, body, PAGE.left + 14, y + 24, PAGE.width - 28, 'Helvetica', 8.5, C.text, 2);
-    p.y = y + h + 8;
-  }
-  section(p, 'Assessment limitations', 'What this report can and cannot tell you.');
-  infoBox(p, 'Important', scan.assessmentStatus === 'complete'
-    ? 'A completed scan means the configured checks finished successfully. It does not prove that the application is free of vulnerabilities. Pattern-based and dependency checks can miss issues that require business context or manual review.'
-    : 'This assessment is incomplete. Findings can still be useful, but the overall score should not be treated as a complete representation of the application security posture.', C.amber, C.amberText);
-}
-
-function section(p, title, subtitle) {
-  const h = height(p.doc, subtitle, PAGE.width, 8.8, 2) + 28;
-  p.ensure(h);
-  p.y = text(p.doc, title, PAGE.left, p.y, PAGE.width, 'Helvetica-Bold', 14, C.ink, 0) + 3;
-  p.y = text(p.doc, subtitle, PAGE.left, p.y, PAGE.width, 'Helvetica', 8.8, C.muted, 2) + 10;
-}
-
-function infoBox(p, title, body, fill, titleColor) {
-  const h = 28 + height(p.doc, body, PAGE.width - 28, 8.5, 2) + 12;
-  p.ensure(h);
-  const y = p.y, d = p.doc;
-  d.roundedRect(PAGE.left, y, PAGE.width, h, 9).fill(fill);
-  text(d, title, PAGE.left + 14, y + 10, PAGE.width - 28, 'Helvetica-Bold', 8.3, titleColor, 0);
-  text(d, body, PAGE.left + 14, y + 25, PAGE.width - 28, 'Helvetica', 8.5, C.text, 2);
-  p.y = y + h;
-}
-
-function metrics(p, items) {
-  p.ensure(64);
-  const d = p.doc, gap = 9, w = (PAGE.width - gap * 3) / 4, y = p.y;
+function drawMetricRow(d, y, items) {
+  const gap = 9;
+  const w = (PAGE.width - gap * 2) / 3;
   items.forEach((m, i) => {
     const x = PAGE.left + i * (w + gap);
-    d.roundedRect(x, y, w, 64, 8).fill(C.white).stroke(C.border);
-    text(d, m[1], x + 9, y + 8, w - 18, 'Helvetica-Bold', 13, C.ink, 0, 'left');
-    text(d, m[0], x + 9, y + 28, w - 18, 'Helvetica-Bold', 7.1, C.text, 0);
-    text(d, m[2], x + 9, y + 41, w - 18, 'Helvetica', 6.4, C.muted, 1);
+    d.roundedRect(x, y, w, 62, 8).fill(m[3]).stroke(C.border);
+    d.font('Helvetica-Bold').fontSize(14).fillColor(m[4]).text(m[0], x + 10, y + 9, { lineBreak: false });
+    d.font('Helvetica-Bold').fontSize(17).fillColor(C.ink).text(m[1], x + 31, y + 8, { lineBreak: false });
+    d.font('Helvetica-Bold').fontSize(7.5).fillColor(m[4]).text(m[2], x + 10, y + 36, { width: w - 20, lineBreak: false });
   });
-  p.y = y + 74;
 }
 
-function field(d, label, body, y, width, size) {
-  text(d, label, PAGE.left + 14, y, width, 'Helvetica-Bold', 7.1, C.muted, 0);
-  const by = y + 11;
-  const h = height(d, body, width, size, 2);
-  text(d, body, PAGE.left + 14, by, width, 'Helvetica', size, C.text, 2);
-  return by + h;
+function drawMiniGuide(d, y, scan) {
+  const gap = 10;
+  const w = (PAGE.width - gap * 2) / 3;
+  const counts = severityCounts(scan.findings || []);
+  const cards = [
+    ['What is working', 'No exposed secrets were detected. Authentication and configuration checks completed successfully.', C.green, C.greenText],
+    ['Needs attention', `${counts.high + counts.critical} high-priority finding(s) plus dependency/application issues need review.`, C.orange, C.orangeText],
+    ['Next steps', 'Fix priority findings, update affected packages, then run a fresh scan to verify the changes.', C.blue, C.blueText],
+  ];
+  cards.forEach((c, i) => {
+    const x = PAGE.left + i * (w + gap);
+    d.roundedRect(x, y, w, 112, 8).fill(c[2]).stroke(C.border);
+    d.font('Helvetica-Bold').fontSize(8.5).fillColor(c[3]).text(c[0], x + 11, y + 12, { width: w - 22, lineBreak: false });
+    text(d, c[1], x + 11, y + 34, w - 22, 'Helvetica', 7.4, C.text, 2);
+  });
+}
+
+function drawPage2(pages, scan) {
+  const p = pages.startPage('Security Overview', 'Score breakdown and detailed analysis of security checks.', { icon: '▥' });
+  const d = p.doc;
+  let y = 143;
+
+  sectionTitle(d, 'Security Area Breakdown', y, 'Each area contributes a defined weight to the overall score.');
+  y += 35;
+  y = drawScoreTable(d, scan, y);
+
+  sectionTitle(d, 'Why These Scores Matter', y + 22, 'The scores help show where attention is needed first.');
+  drawCallout(d, y + 56, 247, 86, 'Dependency Security', 'This area has the highest weight at 30%. Known package vulnerabilities can introduce risk into otherwise secure application code.', C.blue, C.blueText);
+  drawCallout(d, y + 56, 247, 86, 'Application Security', 'This area reflects code-level risks such as unsafe input handling and sensitive response data.', C.tealSoft, C.accentDark);
+
+  sectionTitle(d, 'Assessment Status', y + 163, 'Coverage and scanner status for this assessment.');
+  drawStatusTable(d, scan, y + 196);
+}
+
+function drawScoreTable(d, scan, y) {
+  const cols = [118, 184, 54, 75, 80];
+  const x = PAGE.left;
+  const headerH = 26;
+  const rowH = 48;
+  const headers = ['Security Area', 'What it checks', 'Weight', 'Score', 'Status'];
+  let cx = x;
+  d.roundedRect(x, y, PAGE.width, headerH, 5).fill(C.slate2);
+  headers.forEach((h, i) => {
+    text(d, h, cx + 7, y + 8, cols[i] - 14, 'Helvetica-Bold', 7.2, C.ink, 0);
+    cx += cols[i];
+  });
+  y += headerH;
+
+  const sub = scan.subScores || {};
+  SUBSCORES.forEach(([key, label, explanation, weight], idx) => {
+    cx = x;
+    const score = Number.isFinite(Number(sub[key])) ? Math.round(Number(sub[key])) : null;
+    const status = score === null ? 'Unknown' : score >= 80 ? 'Good' : score >= 60 ? 'Review' : 'Needs Attention';
+    const fill = idx % 2 ? C.white : '#fbfdff';
+    d.rect(x, y, PAGE.width, rowH).fill(fill).stroke(C.border);
+    text(d, label, cx + 7, y + 9, cols[0] - 14, 'Helvetica-Bold', 7.5, C.ink, 1);
+    cx += cols[0];
+    text(d, explanation, cx + 7, y + 9, cols[1] - 14, 'Helvetica', 6.9, C.text, 1.2);
+    cx += cols[1];
+    text(d, `${weight}%`, cx + 7, y + 20, cols[2] - 14, 'Helvetica-Bold', 7.5, C.ink, 0, 'center');
+    cx += cols[2];
+
+    const scoreBg = score === null ? C.slate2 : score >= 80 ? C.green : score >= 60 ? C.amber : C.red;
+    const scoreColor = score === null ? C.muted : score >= 80 ? C.greenText : score >= 60 ? C.amberText : C.redText;
+    d.roundedRect(cx + 5, y + 12, cols[3] - 10, 24, 6).fill(scoreBg);
+    text(d, score === null ? 'N/A' : `${score} / 100`, cx + 5, y + 20, cols[3] - 10, 'Helvetica-Bold', 7.2, scoreColor, 0, 'center');
+    cx += cols[3];
+    text(d, status, cx + 5, y + 16, cols[4] - 10, 'Helvetica-Bold', 6.4, status === 'Good' ? C.greenText : status === 'Review' ? C.amberText : C.redText, 1, 'center');
+    y += rowH;
+  });
+  return y + 12;
+}
+
+function drawStatusTable(d, scan, y) {
+  const rows = [
+    ['Overall Status', scan.assessmentStatus === 'complete' ? 'Complete' : 'Incomplete'],
+    ['Checks Completed', `${successfulEngines(scan)} / 3`],
+    ['Scan Duration', scan.durationMs ? formatDuration(scan.durationMs) : 'Unavailable'],
+    ['Scan Engines', 'npm audit • Secret scanner • Semgrep'],
+  ];
+  const h = rows.length * 26 + 12;
+  d.roundedRect(PAGE.left, y, PAGE.width, h, 8).fill(C.white).stroke(C.border);
+  rows.forEach((r, i) => {
+    const ry = y + 6 + i * 26;
+    if (i) d.rect(PAGE.left + 10, ry - 2, PAGE.width - 20, 0.7).fill(C.border);
+    text(d, r[0], PAGE.left + 13, ry + 6, 120, 'Helvetica-Bold', 7.2, C.muted, 0);
+    text(d, r[1], PAGE.left + 145, ry + 6, PAGE.width - 158, 'Helvetica-Bold', 7.5, C.ink, 0);
+  });
+}
+
+function drawPage3(pages, scan) {
+  const p = pages.startPage('Security Checks Performed', 'These tools work together to give one comprehensive assessment.', { icon: '⚙' });
+  const d = p.doc;
+  let y = 143;
+
+  y = drawEngineTable(d, scan, y);
+  sectionTitle(d, 'Key Takeaways', y + 22, 'What a non-technical reader should take away from the scan.');
+  y += 58;
+
+  const findings = scan.findings || [];
+  const counts = severityCounts(findings);
+  const cards = [
+    ['What’s Working Well', 'No exposed secrets were detected. Authentication and configuration checks completed successfully.', C.green, C.greenText],
+    ['Needs Attention', `${counts.high + counts.critical} high-priority code finding(s) were detected. Dependency and application-security scores also need review.`, C.orange, C.orangeText],
+    ['Next Steps', 'Address high-priority issues, update vulnerable dependencies, then re-run the scan and compare the new score.', C.blue, C.blueText],
+  ];
+  const gap = 10, w = (PAGE.width - gap * 2) / 3;
+  cards.forEach((c, i) => {
+    const x = PAGE.left + i * (w + gap);
+    d.roundedRect(x, y, w, 110, 9).fill(c[2]).stroke(C.border);
+    text(d, c[0], x + 12, y + 13, w - 24, 'Helvetica-Bold', 8.5, c[3], 0);
+    text(d, c[1], x + 12, y + 38, w - 24, 'Helvetica', 7.7, C.text, 2);
+  });
+
+  drawQuote(d, y + 126, 'Security is not a one-time check. Regular scans help keep application changes visible and manageable.');
+  drawScanCoverage(d, scan, y + 188);
+}
+
+function drawEngineTable(d, scan, y) {
+  sectionTitle(d, 'Scanner Coverage', y, 'Status and purpose of each security engine.');
+  y += 34;
+  const cols = [100, 72, 178, 161];
+  const headers = ['Engine', 'Status', 'Purpose', 'Result'];
+  const rows = [
+    ['npm audit', scan.engineStatus?.npmAudit, 'Checks project dependencies for known vulnerabilities.', dependencyResult(scan)],
+    ['Secret scanner', scan.engineStatus?.secretScanner, 'Looks for exposed credentials and secret-like values.', secretResult(scan)],
+    ['Semgrep', scan.engineStatus?.semgrep, 'Checks source code for security patterns.', semgrepResult(scan)],
+  ];
+  d.roundedRect(PAGE.left, y, PAGE.width, 25, 4).fill(C.slate2);
+  let cx = PAGE.left;
+  headers.forEach((h, i) => { text(d, h, cx + 7, y + 8, cols[i] - 14, 'Helvetica-Bold', 7.2, C.ink, 0); cx += cols[i]; });
+  y += 25;
+  rows.forEach((r, idx) => {
+    const h = 54;
+    cx = PAGE.left;
+    d.rect(PAGE.left, y, PAGE.width, h).fill(idx % 2 ? C.white : '#fbfdff').stroke(C.border);
+    text(d, r[0], cx + 7, y + 10, cols[0] - 14, 'Helvetica-Bold', 7.6, C.ink, 0);
+    cx += cols[0];
+    const ok = r[1] === 'success';
+    d.roundedRect(cx + 6, y + 15, cols[1] - 12, 20, 6).fill(ok ? C.green : C.red);
+    text(d, ok ? 'Success' : (r[1] || 'Unknown'), cx + 6, y + 21, cols[1] - 12, 'Helvetica-Bold', 6.8, ok ? C.greenText : C.redText, 0, 'center');
+    cx += cols[1];
+    text(d, r[2], cx + 7, y + 8, cols[2] - 14, 'Helvetica', 7.1, C.text, 1.5);
+    cx += cols[2];
+    text(d, r[3], cx + 7, y + 8, cols[3] - 14, 'Helvetica', 7.1, C.text, 1.5);
+    y += h;
+  });
+  return y;
+}
+
+function drawQuote(d, y, body) {
+  d.roundedRect(PAGE.left, y, PAGE.width, 48, 8).fill(C.blue).stroke(C.border);
+  d.font('Helvetica-Bold').fontSize(20).fillColor(C.blueText).text('“', PAGE.left + 12, y + 9, { lineBreak: false });
+  text(d, body, PAGE.left + 35, y + 11, PAGE.width - 50, 'Helvetica', 8, C.text, 2);
+}
+
+function drawScanCoverage(d, scan, y) {
+  sectionTitle(d, 'Assessment Snapshot', y, 'A quick view of coverage, timing and issue distribution.');
+  y += 35;
+  const counts = severityCounts(scan.findings || []);
+  const cells = [
+    ['Assessment', scan.assessmentStatus === 'complete' ? 'Complete' : 'Incomplete'],
+    ['Duration', scan.durationMs ? formatDuration(scan.durationMs) : 'Unavailable'],
+    ['Critical', String(counts.critical)],
+    ['High', String(counts.high)],
+    ['Medium', String(counts.medium)],
+    ['Low', String(counts.low)],
+  ];
+  const gap = 8, w = (PAGE.width - gap * 2) / 3, h = 42;
+  cells.forEach((c, i) => {
+    const row = Math.floor(i / 3), col = i % 3;
+    const x = PAGE.left + col * (w + gap);
+    const yy = y + row * (h + gap);
+    d.roundedRect(x, yy, w, h, 8).fill(C.white).stroke(C.border);
+    text(d, c[0], x + 10, yy + 8, w - 20, 'Helvetica-Bold', 6.7, C.muted, 0);
+    text(d, c[1], x + 10, yy + 22, w - 20, 'Helvetica-Bold', 10, C.ink, 0);
+  });
+}
+
+function drawPage4(pages, scan) {
+  const p = pages.startPage('Findings and Remediation', 'Detailed high-priority findings with plain-language explanations and actions.', { icon: '!' });
+  const d = p.doc;
+  const findings = sortedFindings(scan.findings || []);
+  const high = findings.filter(f => ['critical', 'high'].includes(String(f.severity || '').toLowerCase()));
+  let y = 143;
+
+  drawPriorityBanner(d, y, 'HIGH PRIORITY FINDINGS', `${high.length}`, 'Should be addressed before release where the affected code is reachable.');
+  y += 42;
+
+  if (!high.length) {
+    drawCallout(d, y, PAGE.width, 90, 'No Critical or High findings', 'The completed scan did not report a Critical or High severity finding. Continue with the Medium and Low findings on the next page.', C.green, C.greenText);
+    return;
+  }
+
+  high.slice(0, 3).forEach((finding, index) => {
+    const h = drawHighFindingCard(d, finding, index + 1, y);
+    y += h + 10;
+  });
+
+  if (high.length > 3) {
+    drawCallout(d, y, PAGE.width, 54, 'Additional high-priority findings', `${high.length - 3} additional Critical/High finding(s) are listed in the continuation section.`, C.red, C.redText);
+  }
+}
+
+function drawHighFindingCard(d, finding, number, y) {
+  const severity = String(finding.severity || 'high').toLowerCase();
+  const [sevColor, sevBg] = SEV[severity] || SEV.high;
+  const title = finding.title || 'Security finding';
+  const description = finding.description || 'The scanner detected a security-related condition that needs review.';
+  const location = finding.file ? `${finding.file}${finding.line ? ` (Line ${finding.line})` : ''}` : 'Location not provided';
+  const category = finding.category || 'other';
+  const simple = plainLanguage(title, description, category);
+  const action = finding.remediation || CATEGORY_ACTIONS[category] || 'Review the affected code, apply the appropriate security control, and run the scan again.';
+  const h = 182;
+
+  d.roundedRect(PAGE.left, y, PAGE.width, h, 9).fill(C.white).stroke(C.border);
+  d.roundedRect(PAGE.left, y, 5, h, 3).fill(sevColor);
+  d.roundedRect(PAGE.left + 14, y + 12, 24, 24, 7).fill(sevColor);
+  text(d, String(number), PAGE.left + 14, y + 19, 24, 'Helvetica-Bold', 9, C.white, 0, 'center');
+  text(d, title, PAGE.left + 48, y + 12, 350, 'Helvetica-Bold', 10, C.ink, 1.5);
+  d.roundedRect(PAGE.left + 425, y + 12, 55, 20, 6).fill(sevBg);
+  text(d, severity.toUpperCase(), PAGE.left + 425, y + 18, 55, 'Helvetica-Bold', 6.5, sevColor, 0, 'center');
+
+  let fy = y + 48;
+  fy = findingField(d, 'WHAT WAS FOUND', description, fy, 8);
+  fy = findingField(d, 'WHERE', location, fy + 5, 7.3);
+  fy = findingField(d, 'IN SIMPLE TERMS', simple, fy + 5, 8);
+  fy = findingField(d, 'WHY IT MATTERS', whyItMatters(severity), fy + 5, 8);
+  findingField(d, 'RECOMMENDED ACTION', action, fy + 5, 8);
+  return h;
+}
+
+function drawPage5(pages, scan) {
+  const p = pages.startPage('Findings and Remediation (Continued)', 'Medium and lower-priority findings with practical next steps.', { icon: '!' });
+  const d = p.doc;
+  const findings = sortedFindings(scan.findings || []);
+  const medium = findings.filter(f => !['critical', 'high'].includes(String(f.severity || '').toLowerCase()));
+  let y = 143;
+
+  drawPriorityBanner(d, y, 'MEDIUM / LOWER PRIORITY FINDINGS', String(medium.length), 'Review as part of normal security maintenance.');
+  y += 45;
+
+  if (!medium.length) {
+    drawCallout(d, y, PAGE.width, 90, 'No additional findings', 'There are no Medium or Low findings to display for this assessment.', C.green, C.greenText);
+    return;
+  }
+
+  const cols = [24, 145, 165, 177];
+  const headers = ['#', 'Finding', 'What it means', 'Recommended action'];
+  d.roundedRect(PAGE.left, y, PAGE.width, 27, 4).fill(C.slate2);
+  let cx = PAGE.left;
+  headers.forEach((h, i) => { text(d, h, cx + 6, y + 9, cols[i] - 12, 'Helvetica-Bold', 7, C.ink, 0); cx += cols[i]; });
+  y += 27;
+
+  medium.forEach((finding, idx) => {
+    const severity = String(finding.severity || 'medium').toLowerCase();
+    const category = finding.category || 'other';
+    const title = finding.title || CATEGORY_LABELS[category] || 'Security finding';
+    const description = finding.description || CATEGORY_EXPLANATIONS[category] || 'Security issue detected.';
+    const action = finding.remediation || CATEGORY_ACTIONS[category] || 'Review the affected area and run the scan again after remediation.';
+    const h = 67;
+    cx = PAGE.left;
+    d.rect(PAGE.left, y, PAGE.width, h).fill(idx % 2 ? C.white : '#fbfdff').stroke(C.border);
+    text(d, String(idx + 1), cx + 6, y + 25, cols[0] - 12, 'Helvetica-Bold', 7.2, C.ink, 0, 'center');
+    cx += cols[0];
+    text(d, title, cx + 6, y + 9, cols[1] - 12, 'Helvetica-Bold', 7.1, C.ink, 1.2);
+    text(d, severity.toUpperCase(), cx + 6, y + 43, cols[1] - 12, 'Helvetica-Bold', 6.1, severity === 'medium' ? C.orangeText : C.blueText, 0);
+    cx += cols[1];
+    text(d, description, cx + 6, y + 9, cols[2] - 12, 'Helvetica', 6.7, C.text, 1.3);
+    cx += cols[2];
+    text(d, action, cx + 6, y + 9, cols[3] - 12, 'Helvetica', 6.7, C.text, 1.3);
+    y += h;
+  });
+
+  drawCallout(d, y + 12, PAGE.width, 58, 'Remediation principle', 'Fix the root cause, not only the scanner symptom. After changes are deployed, run another scan and confirm that the finding is no longer reported.', C.blue, C.blueText);
+}
+
+function drawPage6(pages, scan) {
+  const p = pages.startPage('Additional Information', 'Methodology, priority guidance and important notes.', { icon: '▤' });
+  const d = p.doc;
+  let y = 143;
+
+  sectionTitle(d, 'Priority Guide', y, 'A simple way to decide what to work on first.');
+  y += 34;
+  const cols = [72, 150, 166, 123];
+  const headers = ['Priority', 'Meaning', 'Why it matters', 'Suggested timing'];
+  d.roundedRect(PAGE.left, y, PAGE.width, 26, 4).fill(C.slate2);
+  let cx = PAGE.left;
+  headers.forEach((h, i) => { text(d, h, cx + 6, y + 8, cols[i] - 12, 'Helvetica-Bold', 7, C.ink, 0); cx += cols[i]; });
+  y += 26;
+  [
+    ['High', 'Address as soon as possible.', 'May create meaningful security exposure.', 'Before release'],
+    ['Medium', 'Review as part of maintenance.', 'Can increase risk depending on context.', 'Within 30 days'],
+    ['Low', 'Address when practical.', 'Useful hardening and cleanup.', 'Within 90 days'],
+  ].forEach((r, i) => {
+    const h = 47; cx = PAGE.left;
+    d.rect(PAGE.left, y, PAGE.width, h).fill(C.white).stroke(C.border);
+    const bg = i === 0 ? C.red : i === 1 ? C.orange : C.blue;
+    const tc = i === 0 ? C.redText : i === 1 ? C.orangeText : C.blueText;
+    d.roundedRect(cx + 6, y + 13, 58, 21, 6).fill(bg);
+    text(d, r[0], cx + 6, y + 20, 58, 'Helvetica-Bold', 6.8, tc, 0, 'center');
+    cx += cols[0];
+    text(d, r[1], cx + 6, y + 9, cols[1] - 12, 'Helvetica-Bold', 6.8, C.ink, 1.2);
+    cx += cols[1];
+    text(d, r[2], cx + 6, y + 9, cols[2] - 12, 'Helvetica', 6.8, C.text, 1.2);
+    cx += cols[2];
+    text(d, r[3], cx + 6, y + 9, cols[3] - 12, 'Helvetica-Bold', 6.8, C.ink, 1.2);
+    y += h;
+  });
+
+  sectionTitle(d, 'Report Methodology', y + 20, 'How SecureDev turns scan results into this report.');
+  y += 52;
+  const steps = [
+    ['1', 'Dependency scanning', 'npm audit checks third-party packages for known vulnerabilities.'],
+    ['2', 'Secret detection', 'The secret scanner looks for credentials and sensitive values in source files.'],
+    ['3', 'Static code analysis', 'Semgrep checks source code against security rules and patterns.'],
+    ['4', 'Result normalization', 'Findings are grouped and duplicates are merged before scoring.'],
+    ['5', 'Weighted scoring', 'The five security areas are combined using the configured weights.'],
+  ];
+  steps.forEach(s => {
+    d.roundedRect(PAGE.left, y, 248, 43, 7).fill(C.white).stroke(C.border);
+    d.roundedRect(PAGE.left + 10, y + 10, 23, 23, 7).fill(C.blue);
+    text(d, s[0], PAGE.left + 10, y + 17, 23, 'Helvetica-Bold', 7, C.blueText, 0, 'center');
+    text(d, s[1], PAGE.left + 44, y + 7, 190, 'Helvetica-Bold', 7.1, C.ink, 0);
+    text(d, s[2], PAGE.left + 44, y + 20, 190, 'Helvetica', 6.5, C.text, 1.1);
+    y += 49;
+  });
+
+  drawCallout(d, PAGE.left + 261, 476, 246, 90, 'Assessment Limitations',
+    scan.assessmentStatus === 'complete'
+      ? 'Results are based on automated scanning tools. Some vulnerabilities require manual review, business context, or runtime testing. A completed assessment does not prove complete security.'
+      : 'This assessment is incomplete. The available findings may be useful, but the score should not be treated as a complete representation of the application security posture.',
+    C.tealSoft, C.accentDark);
+
+  drawCallout(d, PAGE.left + 261, 578, 246, 78, 'Final Next Step',
+    'Resolve the highest-priority findings, update vulnerable dependencies, run a fresh scan, and use the new report to verify improvement.',
+    C.blue, C.blueText);
+
+  drawQuote(d, 690, 'A more secure application builds trust and protects the people who use it.');
+}
+
+function sectionTitle(d, title, y, subtitle) {
+  d.font('Helvetica-Bold').fontSize(13).fillColor(C.ink).text(title, PAGE.left, y, { lineBreak: false });
+  if (subtitle) d.font('Helvetica').fontSize(7.6).fillColor(C.muted).text(subtitle, PAGE.left, y + 19, { width: PAGE.width, lineBreak: false });
+}
+
+function drawPriorityBanner(d, y, title, count, subtitle) {
+  d.roundedRect(PAGE.left, y, PAGE.width, 30, 7).fill(C.red);
+  d.font('Helvetica-Bold').fontSize(8.2).fillColor(C.redText).text(title, PAGE.left + 12, y + 10, { lineBreak: false });
+  d.roundedRect(PAGE.left + 425, y + 5, 58, 20, 6).fill(C.white);
+  text(d, count, PAGE.left + 425, y + 11, 58, 'Helvetica-Bold', 7, C.redText, 0, 'center');
+  d.font('Helvetica').fontSize(6.5).fillColor(C.redText).text(subtitle, PAGE.left + 200, y + 11, { width: 210, align: 'right', lineBreak: false });
+}
+
+function drawCallout(d, x, y, w, h, title, body, fill, titleColor) {
+  d.roundedRect(x, y, w, h, 8).fill(fill).stroke(C.border);
+  text(d, title, x + 12, y + 12, w - 24, 'Helvetica-Bold', 8, titleColor, 0);
+  text(d, body, x + 12, y + 31, w - 24, 'Helvetica', 7.2, C.text, 1.7);
+}
+
+function findingField(d, label, body, y, size) {
+  text(d, label, PAGE.left + 14, y, 112, 'Helvetica-Bold', 6.2, C.muted, 0);
+  return text(d, body, PAGE.left + 127, y - 1, PAGE.width - 145, 'Helvetica', size, C.text, 1.2);
 }
 
 function text(d, value, x, y, width, font, size, color, lineGap = 0, align = 'left') {
@@ -349,29 +620,95 @@ function height(d, value, width, size, lineGap = 0) {
   return d.heightOfString(String(value ?? ''), { width, font: d._font ? d._font.name : 'Helvetica', size, lineGap });
 }
 
-function severityCounts(findings) {
-  return findings.reduce((a, f) => { const s = String(f.severity || 'low').toLowerCase(); a[s] = (a[s] || 0) + 1; return a; }, { critical: 0, high: 0, medium: 0, low: 0 });
+function sortedFindings(findings) {
+  return [...findings].sort((a, b) => (SEVERITY_ORDER[String(a.severity || 'low').toLowerCase()] ?? 99) - (SEVERITY_ORDER[String(b.severity || 'low').toLowerCase()] ?? 99));
 }
-function successfulEngines(scan) { return Object.values(scan.engineStatus || {}).filter(v => v === 'success').length; }
+
+function plainLanguage(title, description, category) {
+  const t = `${title} ${description}`.toLowerCase();
+  if (category === 'vulnerableDependencies' || t.includes('dependency') || t.includes('package')) {
+    return 'A third-party package used by the application has a security concern. An attacker could potentially abuse that weakness through functionality that uses the affected package.';
+  }
+  if (category === 'sensitiveDataExposure' || t.includes('sensitive field')) {
+    return 'The application may send private information in a response. Someone who can access that response could see information that was not intended to be exposed.';
+  }
+  if (category === 'injectionFlaws' || t.includes('injection') || t.includes('gcm-no-tag-length')) {
+    return 'A security-sensitive operation is missing an expected protection. An attacker may be able to influence the operation or bypass an intended security check.';
+  }
+  return 'The scanner detected a pattern that can create security risk. The affected code should be reviewed and protected according to the recommended action.';
+}
+
+function buildExecutiveSummary(scan) {
+  const findings = scan.findings || [];
+  const counts = severityCounts(findings);
+  if (scan.assessmentStatus !== 'complete') {
+    return 'The assessment is incomplete. The findings shown in this report are useful for review, but the score should not be treated as a complete security picture until all configured checks finish successfully.';
+  }
+  if (!findings.length) {
+    return 'The configured security checks completed without reporting a finding. Continue regular scanning and dependency maintenance because automated checks cannot prove complete security.';
+  }
+  return `The assessment identified ${findings.length} security issue${findings.length === 1 ? '' : 's'}, including ${counts.critical + counts.high} Critical/High priority issue${counts.critical + counts.high === 1 ? '' : 's'}. Authentication, secrets detection and configuration checks completed successfully, while dependency and application-security areas need attention.`;
+}
+
 function riskMeaning(risk) {
   const t = String(risk || '').toLowerCase();
-  if (t.includes('low')) return 'Few security concerns were detected by the completed checks. Continue reviewing findings and keep dependencies and security controls up to date.';
-  if (t.includes('medium')) return 'The scan found security concerns that should be reviewed and addressed. The score is a summary of the checks that completed.';
-  if (t.includes('high')) return 'The scan found important security concerns that should be addressed promptly, especially issues rated Critical or High.';
-  if (t.includes('critical')) return 'The scan found serious security concerns that require prompt attention before relying on the affected functionality.';
+  if (t.includes('low')) return 'Few security concerns were detected by the completed checks. Continue regular scanning and maintenance.';
+  if (t.includes('medium')) return 'The scan found security concerns that should be reviewed and addressed. The score summarizes the checks that completed.';
+  if (t.includes('high')) return 'The scan found important security concerns that should be addressed promptly, especially Critical and High findings.';
+  if (t.includes('critical')) return 'The scan found serious security concerns that require prompt attention before relying on affected functionality.';
   return 'Review the findings and scanner coverage before treating this assessment as a complete security picture.';
 }
+
 function whyItMatters(s) {
-  if (s === 'critical') return 'This finding represents a critical security concern and should be addressed before release when the affected code is reachable.';
-  if (s === 'high') return 'This finding represents a significant security concern and should normally be addressed before release when the affected code is reachable.';
-  if (s === 'medium') return 'This finding represents a moderate security concern. It should be reviewed and fixed as part of normal security maintenance.';
-  return 'This finding is a lower-severity signal. Review it in the context of the affected feature and address it when practical.';
+  if (s === 'critical') return 'This is a critical security concern and should be addressed before release when the affected code is reachable.';
+  if (s === 'high') return 'This is a significant security concern and should normally be addressed before release when the affected code is reachable.';
+  if (s === 'medium') return 'This is a moderate security concern. Review and fix it as part of normal security maintenance.';
+  return 'This is a lower-severity signal. Review it in context and address it when practical.';
 }
-function humanize(v) { return String(v || 'Other').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase()); }
-function riskColor(r) { const t = String(r || '').toLowerCase(); if (t.includes('critical')) return '#dc2626'; if (t.includes('high')) return '#ea580c'; if (t.includes('medium')) return '#d97706'; return '#16a34a'; }
-function scoreBarColor(s) { if (s >= 80) return '#16a34a'; if (s >= 60) return '#d97706'; if (s >= 40) return '#ea580c'; return '#dc2626'; }
-function clamp(v, min, max) { return Math.min(max, Math.max(min, v)); }
-function formatDuration(ms) { const s = Math.max(0, Math.round(Number(ms) / 1000)); return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`; }
-function formatDate(v) { if (!v) return 'Unavailable'; const d = new Date(v); return Number.isNaN(d.getTime()) ? 'Unavailable' : d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }); }
+
+function severityCounts(findings) {
+  return findings.reduce((a, f) => {
+    const s = String(f.severity || 'low').toLowerCase();
+    a[s] = (a[s] || 0) + 1;
+    return a;
+  }, { critical: 0, high: 0, medium: 0, low: 0 });
+}
+
+function successfulEngines(scan) {
+  return Object.values(scan.engineStatus || {}).filter(v => v === 'success').length;
+}
+function riskFill(risk) {
+  const t = String(risk || '').toLowerCase();
+  if (t.includes('critical') || t.includes('high')) return C.red;
+  if (t.includes('medium')) return C.orange;
+  return C.green;
+}
+function riskText(risk) {
+  const t = String(risk || '').toLowerCase();
+  if (t.includes('critical') || t.includes('high')) return C.redText;
+  if (t.includes('medium')) return C.orangeText;
+  return C.greenText;
+}
+function dependencyResult(scan) {
+  const n = (scan.findings || []).filter(f => f.category === 'vulnerableDependencies').length;
+  return n ? `${n} dependency finding${n === 1 ? '' : 's'} detected.` : 'No dependency findings reported.';
+}
+function secretResult(scan) {
+  const n = (scan.findings || []).filter(f => f.category === 'hardcodedSecrets').length;
+  return n ? `${n} secret-related finding${n === 1 ? '' : 's'} detected.` : 'No exposed secrets detected.';
+}
+function semgrepResult(scan) {
+  const n = (scan.findings || []).filter(f => f.engine === 'semgrep').length;
+  return n ? `${n} source-code finding${n === 1 ? '' : 's'} detected.` : 'No Semgrep findings reported.';
+}
+function formatDuration(ms) {
+  const s = Math.max(0, Math.round(Number(ms) / 1000));
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+function formatDate(v) {
+  if (!v) return 'Unavailable';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? 'Unavailable' : d.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+}
 
 module.exports = { generateScanPdf };
