@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { generateScanPdf } = require('../src/reports/pdfGenerator');
 
-test('generates a valid PDF without pagination errors', async () => {
+test('generates a valid six-page premium PDF without pagination errors', async () => {
   const scan = {
     status: 'completed',
     assessmentStatus: 'complete',
@@ -49,4 +49,5 @@ test('generates a valid PDF without pagination errors', async () => {
   assert.ok(Buffer.isBuffer(buffer));
   assert.ok(buffer.length > 1000);
   assert.equal(buffer.subarray(0, 5).toString(), '%PDF-');
+  assert.equal((buffer.toString('latin1').match(/\/Type \/Page\b/g) || []).length, 6);
 });
