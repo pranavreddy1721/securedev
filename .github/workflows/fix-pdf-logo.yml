@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Add vector SecureDev logo to PDF generator
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
           import re
@@ -30,8 +30,8 @@ jobs:
 
           replacement = r'''function drawLogo(d, x, y) {
   // SECUREDEV_VECTOR_LOGO_V1
-  // Draw the same SecureDev identity directly as vector graphics so the PDF
-  // does not depend on an external image file or a browser-only asset.
+  // Draw the SecureDev identity directly as vector graphics so the PDF
+  // does not depend on an external image file or browser-only asset.
   const box = 30;
 
   d.save();
