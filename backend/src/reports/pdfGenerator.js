@@ -222,7 +222,7 @@ function drawPage2(pages, scan) {
   y += 35;
   y = drawScoreTable(d, scan, y);
   sectionTitle(d, 'Why These Scores Matter', y + 22, 'The scores help show where attention is needed first.');
-  drawCallout(d, y + 56, 247, 86, 'Dependency Security', 'This area has the highest weight at 30%. Known package vulnerabilities can introduce risk into otherwise secure application code.', C.blue, C.blueText);
+  drawCallout(d, PAGE.left, y + 56, 247, 86, 'Dependency Security', 'This area has the highest weight at 30%. Known package vulnerabilities can introduce risk into otherwise secure application code.', C.blue, C.blueText);
   drawCallout(d, PAGE.left + 265, y + 56, 246, 86, 'Application Security', 'This area reflects code-level risks such as unsafe input handling and sensitive response data.', C.tealSoft, C.accentDark);
   sectionTitle(d, 'Assessment Status', y + 163, 'Coverage and scanner status for this assessment.');
   drawStatusTable(d, scan, y + 196);
