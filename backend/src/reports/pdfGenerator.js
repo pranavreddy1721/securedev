@@ -118,8 +118,8 @@ function createPages(doc) {
   function header(title, subtitle) {
     brand();
     y = PAGE.top + 58;
-    y = text(title, PAGE.left, y, PAGE.width, 'Helvetica-Bold', 20, C.ink, 0) + 4;
-    y = text(subtitle, PAGE.left, y, PAGE.width, 'Helvetica', 9, C.muted, 2) + 12;
+    y = text(doc, title, PAGE.left, y, PAGE.width, 'Helvetica-Bold', 20, C.ink, 0) + 4;
+    y = text(doc, subtitle, PAGE.left, y, PAGE.width, 'Helvetica', 9, C.muted, 2) + 12;
   }
 
   function next(title, subtitle) {
