@@ -1,9 +1,10 @@
 name: Add SecureDev PDF Logo
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -15,9 +16,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Add vector SecureDev logo to PDF generator
-        shell: python {0}
+      - name: Patch PDF logo
         run: |
+          python3 - <<'PY'
           from pathlib import Path
           import re
 
@@ -28,16 +29,13 @@ jobs:
               print('PDF logo already installed; nothing to change.')
               raise SystemExit(0)
 
-          replacement = r'''function drawLogo(d, x, y) {
+          replacement = '''function drawLogo(d, x, y) {
   // SECUREDEV_VECTOR_LOGO_V1
-  // Draw the SecureDev identity directly as vector graphics so the PDF
-  // does not depend on an external image file or browser-only asset.
+  // Vector-only SecureDev logo: no external image dependency.
   const box = 30;
-
   d.save();
   d.roundedRect(x, y, box, box, 8).fill(C.accent);
 
-  // Shield outline + check mark.
   d.save();
   d.lineWidth(1.8).lineCap('round').lineJoin('round').strokeColor(C.white);
   d.path(`M ${x + 15} ${y + 6}
@@ -56,27 +54,23 @@ jobs:
   const secureW = d.widthOfString('Secure');
   d.font('Helvetica-Bold').fontSize(16).fillColor(C.accentDark)
     .text('Dev', textX + secureW, y + 4, { lineBreak: false });
-
   d.font('Helvetica').fontSize(6.5).fillColor(C.muted)
-    .text('Application security made easier to understand', textX, y + 23, {
-      width: 210,
-      lineBreak: false,
-    });
+    .text('Application security made easier to understand', textX, y + 23, { width: 210, lineBreak: false });
   d.restore();
 }'''
 
           pattern = r"function drawLogo\(d, x, y\) \{.*?\n\}\n\nfunction drawPage1"
           updated, count = re.subn(pattern, replacement + "\n\nfunction drawPage1", source, count=1, flags=re.S)
           if count != 1:
-              raise SystemExit('Could not locate the existing drawLogo function; no changes made.')
-
+              raise SystemExit('Could not locate drawLogo; no changes made.')
           path.write_text(updated, encoding='utf-8')
-          print('Installed vector SecureDev logo in PDF generator.')
+          print('Installed vector SecureDev logo.')
+          PY
 
-      - name: Commit logo change
+      - name: Commit and push
         run: |
           if git diff --quiet -- backend/src/reports/pdfGenerator.js; then
-            echo "No PDF logo changes to commit."
+            echo "No changes needed."
             exit 0
           fi
           git config user.name "github-actions[bot]"
