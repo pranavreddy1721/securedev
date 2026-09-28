@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowUpRight, Github, History, Plus, Radar, Trash2, Upload, Play, ShieldCheck } from 'lucide-react';
+import { Activity, ArrowUpRight, Github, History, Plus, Radar, Trash2, Upload, Play, ShieldCheck, X } from 'lucide-react';
 import client from '../api/client';
 import { LoadingState, ErrorState } from '../components/AsyncStates';
 import NewProjectModal from '../components/NewProjectModal';
@@ -9,6 +9,7 @@ import RadialGauge from '../components/RadialGauge';
 export default function Dashboard() {
   const [projects, setProjects] = useState(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [scanningId, setScanningId] = useState(null);
   const navigate = useNavigate();
@@ -18,10 +19,24 @@ export default function Dashboard() {
     try { const { data } = await client.get('/projects'); setProjects(data.projects); }
     catch { setError('Failed to load your projects.'); }
   }
-  useEffect(() => { loadProjects(); }, []);
+
+  useEffect(() => {
+    loadProjects();
+    const params = new URLSearchParams(window.location.search);
+    const githubState = params.get('github');
+    if (githubState === 'connected') {
+      setNotice('GitHub connected successfully. Select a public repository to scan.');
+      setShowModal(true);
+    } else if (githubState === 'error') {
+      setError('GitHub connection was not completed. Please try again.');
+      setShowModal(true);
+    }
+    if (githubState) window.history.replaceState({}, document.title, window.location.pathname);
+  }, []);
 
   async function handleCreated({ project, uploadedFilePath }) {
     setShowModal(false);
+    setNotice('');
     await loadProjects();
     await handleScan(project, uploadedFilePath);
   }
@@ -48,6 +63,7 @@ export default function Dashboard() {
   return (
     <main className="min-h-[calc(100vh-76px)] bg-[#f5f8f8] dark:bg-[#061218]">
       <div className="mx-auto max-w-7xl px-5 py-8 lg:px-8 lg:py-10">
+        {notice && <div className="mb-5 flex items-start justify-between gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss"><X className="h-4 w-4" /></button></div>}
         <section className="relative overflow-hidden rounded-[30px] bg-[#071b20] px-7 py-8 text-white shadow-2xl sm:px-10">
           <div className="absolute right-[-100px] top-[-150px] h-[360px] w-[360px] rounded-full bg-emerald-400/15 blur-3xl" />
           <div className="relative z-10 flex flex-col justify-between gap-7 lg:flex-row lg:items-end">
