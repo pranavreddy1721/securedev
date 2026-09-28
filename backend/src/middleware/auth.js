@@ -1,17 +1,20 @@
 const { verifyAccessToken } = require('../utils/jwt');
 const User = require('../models/User');
 
+const ACCESS_COOKIE = 'sd_access_token';
+
 /**
- * Requires a valid Bearer access token. Attaches req.userId on success.
- * Does not touch the database by default (cheap check) — controllers that
- * need the full user document load it themselves.
+ * Requires a valid access token. The preferred transport is an HttpOnly
+ * cookie; the Authorization header remains supported for compatibility with
+ * older clients during rollout.
  */
 async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
-  const [scheme, token] = header.split(' ');
+  const [scheme, headerToken] = header.split(' ');
+  const token = req.cookies?.[ACCESS_COOKIE] || (scheme === 'Bearer' ? headerToken : null);
 
-  if (scheme !== 'Bearer' || !token) {
-    return res.status(401).json({ error: 'Missing or malformed Authorization header' });
+  if (!token) {
+    return res.status(401).json({ error: 'Missing or malformed access token' });
   }
 
   try {
