@@ -21,8 +21,8 @@ router.post(
     body('name').trim().notEmpty().withMessage('Name is required').isLength({ max: 100 }),
     body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
     body('password')
-      .isLength({ min: 8 })
-      .withMessage('Password must be at least 8 characters')
+      .isLength({ min: 8, max: 128 })
+      .withMessage('Password must be between 8 and 128 characters')
       .matches(/[A-Z]/)
       .withMessage('Password must contain an uppercase letter')
       .matches(/[0-9]/)
@@ -37,7 +37,7 @@ router.post(
   authLimiter,
   [
     body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
-    body('password').notEmpty().withMessage('Password is required'),
+    body('password').isLength({ min: 1, max: 128 }).withMessage('Password must be between 1 and 128 characters'),
   ],
   validate,
   authController.login
