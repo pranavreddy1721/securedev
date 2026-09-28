@@ -37,7 +37,7 @@ router.post(
   authLimiter,
   [
     body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
-    body('password').isLength({ min: 1, max: 128 }).withMessage('Password must be between 1 and 128 characters'),
+    body('password').notEmpty().withMessage('Password is required'),
   ],
   validate,
   authController.login
