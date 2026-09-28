@@ -14,17 +14,23 @@ test('zip extractor rejects path traversal entries', async () => {
   const destination = path.join(root, 'out');
   await fs.mkdir(destination);
 
-  const zip = new AdmZip();
-  zip.addFile('../../outside.txt', Buffer.from('should never be extracted'));
-  zip.writeZip(zipPath);
+  try {
+    const zip = new AdmZip();
+    zip.addFile('../../outside.txt', Buffer.from('should never be extracted'));
+    zip.writeZip(zipPath);
 
-  await assert.rejects(
-    () => safeExtract(zipPath, destination),
-    /path traversal attempt/
-  );
+    assert.throws(
+      () => safeExtract(zipPath, destination),
+      /path traversal attempt/
+    );
 
-  assert.equal(await fs.access(path.join(root, 'outside.txt')).then(() => true).catch(() => false), false);
-  await fs.rm(root, { recursive: true, force: true });
+    assert.equal(
+      await fs.access(path.join(root, 'outside.txt')).then(() => true).catch(() => false),
+      false
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test('GitHub cloner rejects non-GitHub clone targets before invoking git', async () => {
