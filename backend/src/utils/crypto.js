@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 
 const ALGORITHM = 'aes-256-gcm';
+const AUTH_TAG_LENGTH = 16;
 
 function getKey() {
   const b64 = process.env.GITHUB_TOKEN_ENC_KEY;
@@ -21,7 +22,7 @@ function getKey() {
 function encrypt(plaintext) {
   const key = getKey();
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const authTag = cipher.getAuthTag();
   return Buffer.concat([iv, authTag, encrypted]).toString('base64');
@@ -30,10 +31,14 @@ function encrypt(plaintext) {
 function decrypt(payloadB64) {
   const key = getKey();
   const buf = Buffer.from(payloadB64, 'base64');
+  if (buf.length < 12 + AUTH_TAG_LENGTH) {
+    throw new Error('Invalid encrypted GitHub token payload');
+  }
+
   const iv = buf.subarray(0, 12);
-  const authTag = buf.subarray(12, 28);
-  const ciphertext = buf.subarray(28);
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  const authTag = buf.subarray(12, 12 + AUTH_TAG_LENGTH);
+  const ciphertext = buf.subarray(12 + AUTH_TAG_LENGTH);
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
   decipher.setAuthTag(authTag);
   const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return decrypted.toString('utf8');
