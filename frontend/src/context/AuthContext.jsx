@@ -8,11 +8,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const loadMe = useCallback(async () => {
-    const token = localStorage.getItem('sd_access_token');
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     try {
       const { data } = await client.get('/auth/me');
       setUser(data.user);
@@ -29,14 +24,12 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const { data } = await client.post('/auth/login', { email, password });
-    localStorage.setItem('sd_access_token', data.accessToken);
     setUser(data.user);
     return data.user;
   }
 
   async function signup(name, email, password) {
     const { data } = await client.post('/auth/signup', { name, email, password });
-    localStorage.setItem('sd_access_token', data.accessToken);
     setUser(data.user);
     return data.user;
   }
@@ -45,9 +38,8 @@ export function AuthProvider({ children }) {
     try {
       await client.post('/auth/logout');
     } catch {
-      // ignore — clearing the access token and server-side refresh cookie follows
+      // Server-side cookie cleanup is best-effort; the local user state is cleared below.
     }
-    localStorage.removeItem('sd_access_token');
     setUser(null);
   }
 
