@@ -13,6 +13,9 @@ const { errorHandler } = require('./middleware/errorHandler');
 function createApp() {
   const app = express();
 
+  // Do not disclose the framework implementation in response headers.
+  app.disable('x-powered-by');
+
   // Render sits behind a reverse proxy and forwards the original client IP in
   // X-Forwarded-For. Trust the single proxy hop so express-rate-limit can
   // safely and correctly identify clients without validation errors.
