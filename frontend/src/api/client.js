@@ -9,6 +9,7 @@ const API_BASE =
 const client = axios.create({
   baseURL: API_BASE,
   timeout: 30000,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -35,13 +36,14 @@ client.interceptors.response.use(
       }
 
       isRefreshing = true;
-      const refreshToken = localStorage.getItem('sd_refresh_token');
 
       try {
-        if (!refreshToken) throw new Error('No refresh token available');
-        const { data } = await axios.post(`${API_BASE}/auth/refresh`, { refreshToken }, { timeout: 15000 });
+        const { data } = await axios.post(
+          `${API_BASE}/auth/refresh`,
+          {},
+          { timeout: 15000, withCredentials: true }
+        );
         localStorage.setItem('sd_access_token', data.accessToken);
-        localStorage.setItem('sd_refresh_token', data.refreshToken);
 
         refreshQueue.forEach(({ resolve, original: queued }) => {
           queued.headers = queued.headers || {};
@@ -57,7 +59,6 @@ client.interceptors.response.use(
         refreshQueue.forEach(({ reject }) => reject(refreshErr));
         refreshQueue = [];
         localStorage.removeItem('sd_access_token');
-        localStorage.removeItem('sd_refresh_token');
         if (window.location.pathname !== '/login') window.location.href = '/login';
         return Promise.reject(refreshErr);
       } finally {
