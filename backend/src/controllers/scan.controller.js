@@ -102,6 +102,11 @@ async function downloadReport(req, res, next) {
     // or a silent browser download failure.
     const pdfBuffer = await generateScanPdf(scan, scan.project);
 
+    // Reports contain project/scanning data; don't let browsers or shared
+    // proxies cache a user's report after the authenticated response.
+    res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Length', pdfBuffer.length);
     res.setHeader('Content-Disposition', `attachment; filename="securedev-report-${scan._id}.pdf"`);
