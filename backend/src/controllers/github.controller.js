@@ -4,17 +4,54 @@ const User = require('../models/User');
 const { encrypt, decrypt } = require('../utils/crypto');
 
 // In-memory state store for CSRF protection on the OAuth flow.
-// Fine for a single-instance deploy; move to Redis/Mongo if scaling out.
+// SecureDev v1 is deployed as a single backend instance. If the service is
+// scaled horizontally, move this state store to Redis/MongoDB.
 const pendingStates = new Map(); // state -> { userId, expiresAt }
 
 const STATE_TTL_MS = 10 * 60 * 1000;
+const GITHUB_API_VERSION = '2022-11-28';
+
+function githubHeaders(accessToken) {
+  return {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': GITHUB_API_VERSION,
+    Authorization: `Bearer ${accessToken}`,
+  };
+}
+
+function getRequiredOAuthConfig() {
+  const required = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_CALLBACK_URL', 'GITHUB_TOKEN_ENC_KEY', 'CLIENT_ORIGIN'];
+  const missing = required.filter((key) => !process.env[key]);
+  return missing;
+}
+
+function getClientOrigin() {
+  return (process.env.CLIENT_ORIGIN || '').split(',')[0].trim().replace(/\/+$/, '');
+}
+
+// Remove expired states opportunistically so a long-running process does not
+// retain abandoned OAuth attempts forever.
+function pruneExpiredStates() {
+  const now = Date.now();
+  for (const [state, pending] of pendingStates) {
+    if (pending.expiresAt <= now) pendingStates.delete(state);
+  }
+}
 
 /**
- * Step 1: Redirects the (already-logged-in) user to GitHub's OAuth consent screen.
- * Scope is public_repo ONLY — per the confirmed decision, do not widen this
- * without an explicit product decision, since it's part of the security story.
+ * Step 1: Redirects the already-authenticated user to GitHub's OAuth consent screen.
+ * Scope is intentionally limited to public_repo.
  */
 function connectStart(req, res) {
+  pruneExpiredStates();
+  const missing = getRequiredOAuthConfig();
+  if (missing.length) {
+    return res.status(503).json({
+      error: 'GitHub connection is not configured on the server',
+      missing,
+    });
+  }
+
   const state = crypto.randomBytes(24).toString('hex');
   pendingStates.set(state, { userId: req.userId, expiresAt: Date.now() + STATE_TTL_MS });
 
@@ -31,14 +68,19 @@ function connectStart(req, res) {
 
 /**
  * Step 2: GitHub redirects here with a code + our state param.
- * Exchanges the code for an access token, encrypts it, stores it on the user.
+ * The state maps the OAuth callback back to the authenticated SecureDev user.
  */
 async function connectCallback(req, res, next) {
   try {
-    const { code, state } = req.query;
+    const { code, state, error: oauthError } = req.query;
+    const missing = getRequiredOAuthConfig();
+    if (missing.length) return res.status(503).send('GitHub connection is not configured on the server.');
+    if (oauthError) return res.redirect(`${getClientOrigin()}/dashboard?github=error`);
+    if (!code || !state) return res.status(400).send('Missing GitHub OAuth code or state.');
 
     const pending = pendingStates.get(state);
     if (!pending || pending.expiresAt < Date.now()) {
+      pendingStates.delete(state);
       return res.status(400).send('OAuth state invalid or expired. Please try connecting again.');
     }
     pendingStates.delete(state);
@@ -51,23 +93,20 @@ async function connectCallback(req, res, next) {
         code,
         redirect_uri: process.env.GITHUB_CALLBACK_URL,
       },
-      { headers: { Accept: 'application/json' } }
+      { headers: { Accept: 'application/json' }, timeout: 15000 }
     );
 
     const { access_token: accessToken, scope } = tokenResp.data;
-    if (!accessToken) {
-      return res.status(400).send('GitHub did not return an access token.');
-    }
+    if (!accessToken) return res.status(400).send('GitHub did not return an access token.');
 
-    // Defensive check: refuse to store a token with a broader scope than requested.
+    // Defensive check: refuse to store a token with the broad repo scope.
     if (scope && scope.split(',').some((s) => s.trim() === 'repo')) {
-      return res
-        .status(400)
-        .send('Received broader OAuth scope than requested (public_repo). Connection rejected.');
+      return res.status(400).send('Received broader OAuth scope than requested (public_repo). Connection rejected.');
     }
 
     const ghUser = await axios.get('https://api.github.com/user', {
-      headers: { Authorization: `token ${accessToken}` },
+      headers: githubHeaders(accessToken),
+      timeout: 15000,
     });
 
     const user = await User.findById(pending.userId);
@@ -82,8 +121,23 @@ async function connectCallback(req, res, next) {
     };
     await user.save();
 
-    const redirectTarget = `${process.env.CLIENT_ORIGIN}/dashboard?github=connected`;
-    return res.redirect(redirectTarget);
+    return res.redirect(`${getClientOrigin()}/dashboard?github=connected`);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function status(req, res, next) {
+  try {
+    const user = await User.findById(req.userId).select('+github.accessTokenEncrypted');
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    return res.json({
+      connected: Boolean(user.github?.accessTokenEncrypted),
+      username: user.github?.username || null,
+      connectedAt: user.github?.connectedAt || null,
+      scope: user.github?.scope || null,
+    });
   } catch (err) {
     return next(err);
   }
@@ -112,11 +166,13 @@ async function listRepos(req, res, next) {
     }
 
     const accessToken = decrypt(user.github.accessTokenEncrypted);
-    const page = parseInt(req.query.page || '1', 10);
+    const requestedPage = Number.parseInt(req.query.page || '1', 10);
+    const page = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 100) : 1;
 
     const resp = await axios.get('https://api.github.com/user/repos', {
-      headers: { Authorization: `token ${accessToken}` },
+      headers: githubHeaders(accessToken),
       params: { visibility: 'public', per_page: 30, page, sort: 'updated' },
+      timeout: 15000,
     });
 
     const repos = resp.data.map((r) => ({
@@ -129,10 +185,10 @@ async function listRepos(req, res, next) {
       language: r.language,
     }));
 
-    return res.json({ repos, page });
+    return res.json({ repos, page, hasNextPage: repos.length === 30 });
   } catch (err) {
     return next(err);
   }
 }
 
-module.exports = { connectStart, connectCallback, disconnect, listRepos };
+module.exports = { connectStart, connectCallback, status, disconnect, listRepos };
