@@ -3,11 +3,6 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const { encrypt, decrypt } = require('../utils/crypto');
 
-// In-memory state store for CSRF protection on the OAuth flow.
-// SecureDev v1 is deployed as a single backend instance. If the service is
-// scaled horizontally, move this state store to Redis/MongoDB.
-const pendingStates = new Map(); // state -> { userId, expiresAt }
-
 const STATE_TTL_MS = 10 * 60 * 1000;
 const GITHUB_API_VERSION = '2022-11-28';
 
@@ -20,21 +15,67 @@ function githubHeaders(accessToken) {
 }
 
 function getRequiredOAuthConfig() {
-  const required = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_CALLBACK_URL', 'GITHUB_TOKEN_ENC_KEY', 'CLIENT_ORIGIN'];
-  const missing = required.filter((key) => !process.env[key]);
-  return missing;
+  const required = [
+    'GITHUB_CLIENT_ID',
+    'GITHUB_CLIENT_SECRET',
+    'GITHUB_CALLBACK_URL',
+    'GITHUB_TOKEN_ENC_KEY',
+    'CLIENT_ORIGIN',
+  ];
+  return required.filter((key) => !process.env[key]);
 }
 
 function getClientOrigin() {
   return (process.env.CLIENT_ORIGIN || '').split(',')[0].trim().replace(/\/+$/, '');
 }
 
-// Remove expired states opportunistically so a long-running process does not
-// retain abandoned OAuth attempts forever.
-function pruneExpiredStates() {
-  const now = Date.now();
-  for (const [state, pending] of pendingStates) {
-    if (pending.expiresAt <= now) pendingStates.delete(state);
+/**
+ * OAuth state is stateless so it survives Render restarts/redeploys and does
+ * not depend on a particular backend instance. The payload is signed with
+ * the GitHub client secret and contains only the SecureDev user id + expiry.
+ */
+function createOAuthState(userId) {
+  const payload = Buffer.from(JSON.stringify({
+    sub: String(userId),
+    exp: Date.now() + STATE_TTL_MS,
+    nonce: crypto.randomBytes(16).toString('hex'),
+  })).toString('base64url');
+
+  const signature = crypto
+    .createHmac('sha256', process.env.GITHUB_CLIENT_SECRET)
+    .update(payload)
+    .digest('base64url');
+
+  return `${payload}.${signature}`;
+}
+
+function verifyOAuthState(state) {
+  if (typeof state !== 'string') return null;
+
+  const parts = state.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+
+  const [payload, signature] = parts;
+  const expected = crypto
+    .createHmac('sha256', process.env.GITHUB_CLIENT_SECRET)
+    .update(payload)
+    .digest('base64url');
+
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    actualBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(actualBuffer, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!decoded?.sub || !Number.isFinite(decoded.exp) || decoded.exp < Date.now()) return null;
+    return { userId: decoded.sub };
+  } catch {
+    return null;
   }
 }
 
@@ -43,7 +84,6 @@ function pruneExpiredStates() {
  * Scope is intentionally limited to public_repo.
  */
 function connectStart(req, res) {
-  pruneExpiredStates();
   const missing = getRequiredOAuthConfig();
   if (missing.length) {
     return res.status(503).json({
@@ -52,9 +92,7 @@ function connectStart(req, res) {
     });
   }
 
-  const state = crypto.randomBytes(24).toString('hex');
-  pendingStates.set(state, { userId: req.userId, expiresAt: Date.now() + STATE_TTL_MS });
-
+  const state = createOAuthState(req.userId);
   const params = new URLSearchParams({
     client_id: process.env.GITHUB_CLIENT_ID,
     redirect_uri: process.env.GITHUB_CALLBACK_URL,
@@ -68,22 +106,28 @@ function connectStart(req, res) {
 
 /**
  * Step 2: GitHub redirects here with a code + our state param.
- * The state maps the OAuth callback back to the authenticated SecureDev user.
+ * The signed state maps the OAuth callback back to the authenticated SecureDev user.
  */
 async function connectCallback(req, res, next) {
   try {
     const { code, state, error: oauthError } = req.query;
     const missing = getRequiredOAuthConfig();
     if (missing.length) return res.status(503).send('GitHub connection is not configured on the server.');
-    if (oauthError) return res.redirect(`${getClientOrigin()}/dashboard?github=error`);
-    if (!code || !state) return res.status(400).send('Missing GitHub OAuth code or state.');
 
-    const pending = pendingStates.get(state);
-    if (!pending || pending.expiresAt < Date.now()) {
-      pendingStates.delete(state);
-      return res.status(400).send('OAuth state invalid or expired. Please try connecting again.');
+    if (oauthError) {
+      return res.redirect(`${getClientOrigin()}/dashboard?github=error`);
     }
-    pendingStates.delete(state);
+
+    // A direct visit/bookmark to the callback URL has no OAuth parameters.
+    // Do not treat that as a server/configuration failure.
+    if (!code || !state) {
+      return res.status(400).send('Missing GitHub OAuth code or state. Start the connection again from SecureDev.');
+    }
+
+    const pending = verifyOAuthState(state);
+    if (!pending) {
+      return res.status(400).send('OAuth state invalid or expired. Please start the GitHub connection again.');
+    }
 
     const tokenResp = await axios.post(
       'https://github.com/login/oauth/access_token',
