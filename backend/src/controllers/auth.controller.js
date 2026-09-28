@@ -7,6 +7,29 @@ const {
   hashToken,
 } = require('../utils/jwt');
 
+const REFRESH_COOKIE = 'sd_refresh_token';
+
+function setRefreshCookie(res, token) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.cookie(REFRESH_COOKIE, token, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/api/auth',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+}
+
+function clearRefreshCookie(res) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  res.clearCookie(REFRESH_COOKIE, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/api/auth',
+  });
+}
+
 async function signup(req, res, next) {
   try {
     const { name, email, password } = req.body;
@@ -25,11 +48,11 @@ async function signup(req, res, next) {
     const refreshToken = signRefreshToken(user);
     user.refreshTokenHash = hashToken(refreshToken);
     await user.save();
+    setRefreshCookie(res, refreshToken);
 
     return res.status(201).json({
       user: user.toSafeJSON(),
       accessToken,
-      refreshToken,
     });
   } catch (err) {
     return next(err);
@@ -55,11 +78,11 @@ async function login(req, res, next) {
     const refreshToken = signRefreshToken(user);
     user.refreshTokenHash = hashToken(refreshToken);
     await user.save();
+    setRefreshCookie(res, refreshToken);
 
     return res.json({
       user: user.toSafeJSON(),
       accessToken,
-      refreshToken,
     });
   } catch (err) {
     return next(err);
@@ -68,21 +91,24 @@ async function login(req, res, next) {
 
 async function refresh(req, res, next) {
   try {
-    const { refreshToken } = req.body;
+    // Cookie is the normal path. The body fallback keeps already-open older
+    // clients working through one rotation while the new frontend rolls out.
+    const refreshToken = req.cookies[REFRESH_COOKIE] || req.body?.refreshToken;
     if (!refreshToken) {
-      return res.status(400).json({ error: 'refreshToken is required' });
+      return res.status(401).json({ error: 'Refresh token is required' });
     }
 
     let payload;
     try {
       payload = verifyRefreshToken(refreshToken);
     } catch (err) {
+      clearRefreshCookie(res);
       return res.status(401).json({ error: 'Invalid or expired refresh token' });
     }
 
     const user = await User.findById(payload.sub).select('+refreshTokenHash');
     if (!user || user.refreshTokenHash !== hashToken(refreshToken)) {
-      // Token reuse / mismatch — treat as compromised, force re-login.
+      clearRefreshCookie(res);
       return res.status(401).json({ error: 'Refresh token no longer valid' });
     }
 
@@ -90,8 +116,9 @@ async function refresh(req, res, next) {
     const newRefreshToken = signRefreshToken(user);
     user.refreshTokenHash = hashToken(newRefreshToken);
     await user.save();
+    setRefreshCookie(res, newRefreshToken);
 
-    return res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken });
+    return res.json({ accessToken: newAccessToken });
   } catch (err) {
     return next(err);
   }
@@ -104,6 +131,7 @@ async function logout(req, res, next) {
       user.refreshTokenHash = null;
       await user.save();
     }
+    clearRefreshCookie(res);
     return res.status(204).send();
   } catch (err) {
     return next(err);
