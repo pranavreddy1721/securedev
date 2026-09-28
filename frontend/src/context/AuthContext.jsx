@@ -30,7 +30,6 @@ export function AuthProvider({ children }) {
   async function login(email, password) {
     const { data } = await client.post('/auth/login', { email, password });
     localStorage.setItem('sd_access_token', data.accessToken);
-    localStorage.setItem('sd_refresh_token', data.refreshToken);
     setUser(data.user);
     return data.user;
   }
@@ -38,7 +37,6 @@ export function AuthProvider({ children }) {
   async function signup(name, email, password) {
     const { data } = await client.post('/auth/signup', { name, email, password });
     localStorage.setItem('sd_access_token', data.accessToken);
-    localStorage.setItem('sd_refresh_token', data.refreshToken);
     setUser(data.user);
     return data.user;
   }
@@ -47,10 +45,9 @@ export function AuthProvider({ children }) {
     try {
       await client.post('/auth/logout');
     } catch {
-      // ignore — clearing local tokens is what actually matters client-side
+      // ignore — clearing the access token and server-side refresh cookie follows
     }
     localStorage.removeItem('sd_access_token');
-    localStorage.removeItem('sd_refresh_token');
     setUser(null);
   }
 
