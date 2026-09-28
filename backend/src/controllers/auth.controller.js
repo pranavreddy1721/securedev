@@ -91,7 +91,9 @@ async function login(req, res, next) {
 
 async function refresh(req, res, next) {
   try {
-    const refreshToken = req.cookies[REFRESH_COOKIE];
+    // Cookie is the normal path. The body fallback keeps already-open older
+    // clients working through one rotation while the new frontend rolls out.
+    const refreshToken = req.cookies[REFRESH_COOKIE] || req.body?.refreshToken;
     if (!refreshToken) {
       return res.status(401).json({ error: 'Refresh token is required' });
     }
