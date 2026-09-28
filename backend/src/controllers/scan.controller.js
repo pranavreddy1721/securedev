@@ -10,6 +10,12 @@ const { cloneRepo } = require('../utils/repoCloner');
 const { decrypt } = require('../utils/crypto');
 const { generateScanPdf } = require('../reports/pdfGenerator');
 
+function isPathInsideDirectory(candidatePath, directoryPath) {
+  const candidate = path.resolve(candidatePath);
+  const directory = path.resolve(directoryPath);
+  return candidate === directory || candidate.startsWith(`${directory}${path.sep}`);
+}
+
 async function triggerScan(req, res, next) {
   try {
     const project = await Project.findOne({ _id: req.params.projectId, owner: req.userId });
@@ -23,7 +29,7 @@ async function triggerScan(req, res, next) {
 
       if (project.source.type === 'zip') {
         const { uploadedFilePath } = req.body;
-        if (!uploadedFilePath || !uploadedFilePath.startsWith(os.tmpdir())) {
+        if (!uploadedFilePath || !isPathInsideDirectory(uploadedFilePath, os.tmpdir())) {
           throw new Error('Invalid or missing uploadedFilePath for zip project');
         }
         safeExtract(uploadedFilePath, workDir);
@@ -106,4 +112,4 @@ async function downloadReport(req, res, next) {
   }
 }
 
-module.exports = { triggerScan, getScan, listScanHistory, downloadReport };
+module.exports = { triggerScan, getScan, listScanHistory, downloadReport, isPathInsideDirectory };
