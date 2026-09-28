@@ -14,19 +14,36 @@ function githubHeaders(accessToken) {
   };
 }
 
-function getRequiredOAuthConfig() {
-  const required = [
-    'GITHUB_CLIENT_ID',
-    'GITHUB_CLIENT_SECRET',
-    'GITHUB_CALLBACK_URL',
-    'GITHUB_TOKEN_ENC_KEY',
-    'CLIENT_ORIGIN',
-  ];
-  return required.filter((key) => !process.env[key]);
+/**
+ * Render environment variables are commonly pasted through the dashboard.
+ * Normalize OAuth values at the application boundary so accidental leading /
+ * trailing whitespace (especially a pasted newline) cannot become part of the
+ * GitHub client_id, client_secret, or callback URL.
+ */
+function getOAuthConfig() {
+  return {
+    clientId: String(process.env.GITHUB_CLIENT_ID || '').trim(),
+    clientSecret: String(process.env.GITHUB_CLIENT_SECRET || '').trim(),
+    callbackUrl: String(process.env.GITHUB_CALLBACK_URL || '').trim(),
+    tokenEncKey: String(process.env.GITHUB_TOKEN_ENC_KEY || '').trim(),
+    clientOrigin: String(process.env.CLIENT_ORIGIN || '')
+      .split(',')[0]
+      .trim()
+      .replace(/\/+$/, ''),
+  };
 }
 
-function getClientOrigin() {
-  return (process.env.CLIENT_ORIGIN || '').split(',')[0].trim().replace(/\/+$/, '');
+function getRequiredOAuthConfig() {
+  const config = getOAuthConfig();
+  return [
+    ['GITHUB_CLIENT_ID', config.clientId],
+    ['GITHUB_CLIENT_SECRET', config.clientSecret],
+    ['GITHUB_CALLBACK_URL', config.callbackUrl],
+    ['GITHUB_TOKEN_ENC_KEY', config.tokenEncKey],
+    ['CLIENT_ORIGIN', config.clientOrigin],
+  ]
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
 }
 
 /**
@@ -35,6 +52,7 @@ function getClientOrigin() {
  * the GitHub client secret and contains only the SecureDev user id + expiry.
  */
 function createOAuthState(userId) {
+  const { clientSecret } = getOAuthConfig();
   const payload = Buffer.from(JSON.stringify({
     sub: String(userId),
     exp: Date.now() + STATE_TTL_MS,
@@ -42,7 +60,7 @@ function createOAuthState(userId) {
   })).toString('base64url');
 
   const signature = crypto
-    .createHmac('sha256', process.env.GITHUB_CLIENT_SECRET)
+    .createHmac('sha256', clientSecret)
     .update(payload)
     .digest('base64url');
 
@@ -52,12 +70,13 @@ function createOAuthState(userId) {
 function verifyOAuthState(state) {
   if (typeof state !== 'string') return null;
 
+  const { clientSecret } = getOAuthConfig();
   const parts = state.split('.');
   if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
 
   const [payload, signature] = parts;
   const expected = crypto
-    .createHmac('sha256', process.env.GITHUB_CLIENT_SECRET)
+    .createHmac('sha256', clientSecret)
     .update(payload)
     .digest('base64url');
 
@@ -92,10 +111,11 @@ function connectStart(req, res) {
     });
   }
 
+  const { clientId, callbackUrl } = getOAuthConfig();
   const state = createOAuthState(req.userId);
   const params = new URLSearchParams({
-    client_id: process.env.GITHUB_CLIENT_ID,
-    redirect_uri: process.env.GITHUB_CALLBACK_URL,
+    client_id: clientId,
+    redirect_uri: callbackUrl,
     scope: 'public_repo',
     state,
     allow_signup: 'false',
@@ -114,8 +134,10 @@ async function connectCallback(req, res, next) {
     const missing = getRequiredOAuthConfig();
     if (missing.length) return res.status(503).send('GitHub connection is not configured on the server.');
 
+    const { clientId, clientSecret, callbackUrl, clientOrigin } = getOAuthConfig();
+
     if (oauthError) {
-      return res.redirect(`${getClientOrigin()}/dashboard?github=error`);
+      return res.redirect(`${clientOrigin}/dashboard?github=error`);
     }
 
     // A direct visit/bookmark to the callback URL has no OAuth parameters.
@@ -132,10 +154,10 @@ async function connectCallback(req, res, next) {
     const tokenResp = await axios.post(
       'https://github.com/login/oauth/access_token',
       {
-        client_id: process.env.GITHUB_CLIENT_ID,
-        client_secret: process.env.GITHUB_CLIENT_SECRET,
+        client_id: clientId,
+        client_secret: clientSecret,
         code,
-        redirect_uri: process.env.GITHUB_CALLBACK_URL,
+        redirect_uri: callbackUrl,
       },
       { headers: { Accept: 'application/json' }, timeout: 15000 }
     );
@@ -165,7 +187,7 @@ async function connectCallback(req, res, next) {
     };
     await user.save();
 
-    return res.redirect(`${getClientOrigin()}/dashboard?github=connected`);
+    return res.redirect(`${clientOrigin}/dashboard?github=connected`);
   } catch (err) {
     return next(err);
   }
