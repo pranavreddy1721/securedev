@@ -57,3 +57,27 @@ test('GitHub cloner rejects unsafe branch names', async () => {
     /Invalid GitHub branch/
   );
 });
+
+test('dependency lockfile keeps reported vulnerable packages on patched versions', async () => {
+  const lockPath = path.join(__dirname, '..', 'package-lock.json');
+  const lock = JSON.parse(await fs.readFile(lockPath, 'utf8'));
+  const packages = lock.packages || {};
+
+  const patchedVersions = {
+    'node_modules/simple-git': '4.0.2',
+    'node_modules/@simple-git/argv-parser': '2.0.1',
+    'node_modules/@simple-git/args-pathspec': '1.0.4',
+    'node_modules/proxy-addr': '2.0.8',
+    'node_modules/adm-zip': '0.6.1',
+    'node_modules/qs': '6.16.0',
+    'node_modules/body-parser': '1.20.8',
+  };
+
+  for (const [packagePath, expectedVersion] of Object.entries(patchedVersions)) {
+    assert.equal(
+      packages[packagePath]?.version,
+      expectedVersion,
+      `${packagePath} must remain on reviewed patched version ${expectedVersion}`
+    );
+  }
+});
