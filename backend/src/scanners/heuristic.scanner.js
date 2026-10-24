@@ -77,8 +77,12 @@ async function runHeuristicScan(projectDir) {
     const sensitiveLog = /console\.(log|info|debug)\([^)]*\b(password|token|secret|ssn|creditCard|card_number|authorization)\b/i.exec(content);
     if (sensitiveLog) findings.push(makeFinding('sensitiveDataExposure', 'high', 'Sensitive field logged to console', 'A variable named like a sensitive field is passed to console logging. Sensitive data should not be logged in plaintext.', relPath, lineOf(content, sensitiveLog.index), 'A02:2021 - Cryptographic Failures'));
     if (/schema\s*=\s*new\s+mongoose\.Schema\(\{[^}]*password[^}]*type\s*:\s*String/is.test(content) && !/select\s*:\s*false/i.test(content)) findings.push(makeFinding('sensitiveDataExposure', 'medium', 'Password field may not be excluded from query results', 'A Mongoose schema has a String password field without select:false. Review API serialization and query behavior to ensure passwords cannot be returned.', relPath, null, 'A02:2021 - Cryptographic Failures'));
-    const jsonSensitive = /res\.(json|send)\([^)]*\b(password|passwordHash|refreshToken|accessToken|secret|apiKey)\b/i.exec(content);
-    if (jsonSensitive) findings.push(makeFinding('sensitiveDataExposure', 'high', 'Sensitive field may be returned in an API response', 'A response appears to include a sensitive field. Verify that secrets, password hashes and tokens are removed before serialization.', relPath, lineOf(content, jsonSensitive.index), 'A02:2021 - Cryptographic Failures'));
+    // Access tokens are intentionally returned by login/signup/refresh endpoints so the
+    // client can authenticate. Flag credentials and server-side secrets in response
+    // expressions, but do not treat the expected accessToken response field alone as
+    // evidence of a leak. This remains a lightweight heuristic, not data-flow analysis.
+    const jsonSensitive = /res\.(json|send)\([^)]*\b(password|passwordHash|refreshToken|secret|apiKey)\b/i.exec(content);
+    if (jsonSensitive) findings.push(makeFinding('sensitiveDataExposure', 'high', 'Sensitive field may be returned in an API response', 'A response appears to include a password-related value, refresh token, secret, or API key. Verify that sensitive values are removed before serialization.', relPath, lineOf(content, jsonSensitive.index), 'A02:2021 - Cryptographic Failures'));
 
     // Authentication configuration
     const weakBcrypt = /bcrypt\.(hash|genSalt)\([^)]*,\s*(?:[1-9]|10)\s*[,)]/.exec(content);
