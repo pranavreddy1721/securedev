@@ -1,7 +1,8 @@
 const fs = require('fs/promises');
 const path = require('path');
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build']);
+// Do not treat test code and deliberately unsafe test fixtures as shipped application code.
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'test', 'tests', '__tests__']);
 const AUTH_MIDDLEWARE = /\b(?:requireAuth|authMiddleware|isAuthenticated|verifyToken|authenticate|passport\.authenticate|protect|requireLogin|ensureAuthenticated)\b/;
 const AUTHZ_MIDDLEWARE = /\b(?:authorize|requireRole|requirePermission|checkRole|checkPermission|isAdmin|adminOnly|rbac|acl|canAccess)\b/i;
 const SENSITIVE_ROUTE = /\/(?:admin|users?|accounts?|profiles?|settings|payments?|orders?|delete|update|manage|private|dashboard)(?:\/|$)/i;
