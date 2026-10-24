@@ -43,3 +43,20 @@ test('continues to flag password hashes in API response expressions', async () =
     true
   );
 });
+
+test('ignores test directories when scanning application code', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'securedev-heuristic-test-'));
+  try {
+    const testDir = path.join(root, 'test');
+    await fs.mkdir(testDir, { recursive: true });
+    await fs.writeFile(path.join(testDir, 'unsafe-fixture.test.js'), `return res.json({ passwordHash: user.passwordHash });`);
+    const findings = await runHeuristicScan(root);
+    assert.equal(
+      findings.some((finding) => finding.category === 'sensitiveDataExposure' &&
+        finding.title === 'Sensitive field may be returned in an API response'),
+      false
+    );
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
