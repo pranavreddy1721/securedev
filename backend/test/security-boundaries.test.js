@@ -70,7 +70,7 @@ test('dependency lockfile keeps reported vulnerable packages on patched versions
     'node_modules/proxy-addr': '2.0.8',
     'node_modules/adm-zip': '0.6.1',
     'node_modules/qs': '6.16.0',
-    'node_modules/body-parser': '1.20.8',
+    'node_modules/body-parser': '1.20.9',
   };
 
   for (const [packagePath, expectedVersion] of Object.entries(patchedVersions)) {
