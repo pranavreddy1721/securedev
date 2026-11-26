@@ -13,7 +13,7 @@ const NPM_SEVERITY_MAP = {
   info: 'low',
 };
 
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache']);
+const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache', '.turbo', '.vercel', 'test', 'tests', 'fixtures', '__fixtures__', 'vendor', 'out']);
 
 async function findNpmProjects(projectDir, currentDir = projectDir, depth = 0, results = []) {
   if (depth > 4) return results;
