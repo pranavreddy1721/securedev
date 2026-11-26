@@ -77,8 +77,17 @@ async function runHeuristicScan(projectDir) {
     }
 
     // Sensitive data exposure
-    const sensitiveLog = /console\.(log|info|debug)\([^)]*\b(password|token|secret|ssn|creditCard|card_number|authorization)\b/i.exec(content);
-    if (sensitiveLog) findings.push(makeFinding('sensitiveDataExposure', 'high', 'Sensitive field logged to console', 'A variable named like a sensitive field is passed to console logging. Sensitive data should not be logged in plaintext.', relPath, lineOf(content, sensitiveLog.index), 'A02:2021 - Cryptographic Failures'));
+    const consoleCall = /console\.(?:log|info|debug|warn|error)\s*\(([^)]*)\)/gi;
+    let sensitiveLog = null;
+    for (const call of content.matchAll(consoleCall)) {
+      // Ignore quoted text (e.g. "token refreshed") and inspect actual expressions.
+      const argsWithoutStrings = call[1].replace(/(['"`])(?:\\.|(?!\\1)[^\\])*?\\1/g, ' ');
+      if (/\b(?:password|passwd|pwd|token|secret|ssn|creditCard|card_number|authorization)\b/i.test(argsWithoutStrings)) {
+        sensitiveLog = call;
+        break;
+      }
+    }
+    if (sensitiveLog) findings.push(makeFinding('sensitiveDataExposure', 'high', 'Sensitive field logged to console', 'A sensitive variable appears in a console logging call. Verify that credentials and personal data are not written to logs.', relPath, lineOf(content, sensitiveLog.index), 'A02:2021 - Cryptographic Failures'));
     if (/schema\s*=\s*new\s+mongoose\.Schema\(\{[^}]*password[^}]*type\s*:\s*String/is.test(content) && !/select\s*:\s*false/i.test(content)) findings.push(makeFinding('sensitiveDataExposure', 'medium', 'Password field may not be excluded from query results', 'A Mongoose schema has a String password field without select:false. Review API serialization and query behavior to ensure passwords cannot be returned.', relPath, null, 'A02:2021 - Cryptographic Failures'));
     // Access tokens are intentionally returned by login/signup/refresh endpoints so the
     // client can authenticate. Flag credentials and server-side secrets in response
