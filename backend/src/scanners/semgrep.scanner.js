@@ -37,7 +37,15 @@ async function runSemgrepScan(projectDir) {
   }
 
   const timeoutMs = parseInt(process.env.SEMGREP_TIMEOUT_MS || '120000', 10);
-  const args = ['scan', '--json', '--no-git-ignore', '--metrics=off'];
+  // Keep Semgrep's project-wide scan behavior, but exclude test suites and
+  // intentionally vulnerable fixtures so they do not inflate application risk.
+  const args = [
+    'scan', '--json', '--no-git-ignore', '--metrics=off',
+    '--exclude=**/test/**',
+    '--exclude=**/tests/**',
+    '--exclude=**/fixtures/**',
+    '--exclude=**/__fixtures__/**',
+  ];
   for (const ruleset of rulesets) args.push('--config', ruleset);
   args.push(projectDir);
 
