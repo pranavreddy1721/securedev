@@ -61,3 +61,23 @@ test('does not scan test and intentionally vulnerable fixture directories', asyn
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+
+test('does not flag harmless log messages that merely mention token/password', async () => {
+  const findings = await scanSource(`
+    function status() {
+      console.info('token refreshed successfully');
+      console.log('password reset flow started');
+    }
+  `);
+  assert.equal(findings.some((finding) => finding.title === 'Sensitive field logged to console'), false);
+});
+
+test('flags actual sensitive variables written to logs', async () => {
+  const findings = await scanSource(`
+    function debug(user) {
+      console.error('failed login', user.passwordHash);
+    }
+  `);
+  assert.equal(findings.some((finding) => finding.title === 'Sensitive field logged to console'), true);
+});
