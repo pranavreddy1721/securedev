@@ -43,3 +43,21 @@ test('continues to flag password hashes in API response expressions', async () =
     true
   );
 });
+
+
+test('does not scan test and intentionally vulnerable fixture directories', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'securedev-heuristic-ignore-'));
+  try {
+    const vulnerableSource = 'const upload = multer();' + String.fromCharCode(10);
+    for (const folder of ['test', 'tests', 'fixtures', '__fixtures__']) {
+      const dir = path.join(root, folder);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'vulnerable.js'), vulnerableSource);
+    }
+    const findings = await runHeuristicScan(root);
+    assert.equal(findings.some((finding) => finding.file &&
+      ['test', 'tests', 'fixtures', '__fixtures__'].includes(finding.file.split(path.sep)[0])), false);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
