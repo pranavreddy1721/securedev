@@ -69,7 +69,7 @@ test('dependency lockfile keeps reported vulnerable packages on patched versions
     'node_modules/@simple-git/args-pathspec': '1.0.4',
     'node_modules/proxy-addr': '2.0.8',
     'node_modules/adm-zip': '0.6.1',
-    'node_modules/qs': '6.16.0',
+    'node_modules/qs': '6.16.1',
     'node_modules/body-parser': '1.20.9',
   };
 
