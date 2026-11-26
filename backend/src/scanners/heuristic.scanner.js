@@ -2,7 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 
 // Test suites and intentionally vulnerable fixtures are not production application code.
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'test', 'tests', 'fixtures', '__fixtures__']);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'test', 'tests', 'fixtures', '__fixtures__', 'coverage', '.next', '.turbo', '.vercel', '.cache', 'vendor', 'out']);
 const AUTH_MIDDLEWARE = /\b(?:requireAuth|authMiddleware|isAuthenticated|verifyToken|authenticate|passport\.authenticate|protect|requireLogin|ensureAuthenticated)\b/;
 const AUTHZ_MIDDLEWARE = /\b(?:authorize|requireRole|requirePermission|checkRole|checkPermission|isAdmin|adminOnly|rbac|acl|canAccess)\b/i;
 const SENSITIVE_ROUTE = /\/(?:admin|users?|accounts?|profiles?|settings|payments?|orders?|delete|update|manage|private|dashboard)(?:\/|$)/i;
@@ -28,11 +28,13 @@ function makeFinding(category, severity, title, description, file, line, owaspRe
 async function runHeuristicScan(projectDir) {
   const findings = [];
   const files = await walkJsFiles(projectDir);
+  let helmetDetected = false;
 
   for (const filePath of files) {
     let content;
     try { content = await fs.readFile(filePath, 'utf8'); } catch { continue; }
     const relPath = path.relative(projectDir, filePath);
+    if (/require\\(['\"]helmet['\"]\\)|from ['\"]helmet['\"]/.test(content)) helmetDetected = true;
 
     // File-upload security
     const multerIndex = content.search(/multer\s*\(|multer\.diskStorage\(/);
