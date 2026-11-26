@@ -82,7 +82,7 @@ async function runHeuristicScan(projectDir) {
     for (const call of content.matchAll(consoleCall)) {
       // Ignore quoted text (e.g. "token refreshed") and inspect actual expressions.
       const argsWithoutStrings = call[1].replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g, ' ');
-      if (/\b(?:password|passwd|pwd|token|secret|ssn|creditCard|card_number|authorization)\b/i.test(argsWithoutStrings)) {
+      if (/\b(?:passwordHash|password|passwd|pwd|token|secret|ssn|creditCard|card_number|authorization)\b/i.test(argsWithoutStrings)) {
         sensitiveLog = call;
         break;
       }
